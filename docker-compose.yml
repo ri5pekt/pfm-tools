@@ -64,5 +64,17 @@ services:
         command: >
             python -m worker
 
+    # Frontend (optional - you can also run 'npm run dev' in frontend/ directory)
+    # Uncomment to use Docker container instead of dev server
+    # frontend:
+    #     build:
+    #         context: ./frontend
+    #         args:
+    #             VITE_API_BASE_URL: http://localhost:8000/api
+    #     ports:
+    #         - "5173:80"
+    #     depends_on:
+    #         - backend
+
 volumes:
     db_data:
