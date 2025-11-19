@@ -17,3 +17,11 @@ frontend/dist/
 # IDE
 .vscode/
 .idea/
+
+# Data files (processed CSVs and uploads)
+data/processed/
+data/uploads/
+*.csv
+
+# Test/example files
+order_*.json
