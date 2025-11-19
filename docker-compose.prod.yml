@@ -48,7 +48,6 @@ services:
             --host 0.0.0.0
             --port 8000
             --workers ${BACKEND_WORKERS:-2}
-            --no-reload
 
     # Worker template - will be scaled using docker-compose scale command
     worker:
@@ -73,11 +72,10 @@ services:
             args:
                 VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
         ports:
-            - "${FRONTEND_PORT:-80}:80"
+            - "${FRONTEND_PORT:-8080}:80"
         depends_on:
             - backend
         restart: unless-stopped
 
 volumes:
     db_data:
-
