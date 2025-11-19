@@ -1,0 +1,68 @@
+version: "3.9"
+
+services:
+    db:
+        image: postgres:16
+        environment:
+            POSTGRES_DB: pfmtools
+            POSTGRES_USER: pfmtools
+            POSTGRES_PASSWORD: pfmtools
+        volumes:
+            - db_data:/var/lib/postgresql/data
+        ports:
+            - "5433:5432"
+
+    redis:
+        image: redis:7
+        ports:
+            - "6379:6379"
+
+    backend:
+        build:
+            context: ./backend
+        env_file:
+            - .env
+        volumes:
+            - ./backend:/app
+            - ./data:/data
+        depends_on:
+            - db
+            - redis
+        ports:
+            - "8000:8000"
+        command: >
+            uvicorn app.main:app
+            --host 0.0.0.0
+            --port 8000
+            --reload
+
+    worker:
+        build:
+            context: ./backend
+        env_file:
+            - .env
+        volumes:
+            - ./backend:/app
+            - ./data:/data
+        depends_on:
+            - backend
+            - redis
+        command: >
+            python -m worker
+
+    worker2:
+        build:
+            context: ./backend
+        env_file:
+            - .env
+        volumes:
+            - ./backend:/app
+            - ./data:/data
+        depends_on:
+            - backend
+            - redis
+        command: >
+            python -m worker
+
+volumes:
+    db_data:
