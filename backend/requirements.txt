@@ -22,4 +22,6 @@ requests
 
 braintree
 
+reportlab
+
 

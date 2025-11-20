@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.db import Base, engine
 from app.auth.routes import router as auth_router
 from app.features.sales_tax_processor.routes import router as sales_tax_router
+from app.features.order_comparison.routes import router as order_comparison_router
 
 # Configure logging
 logging.basicConfig(
@@ -76,6 +77,9 @@ app.include_router(auth_router)
 
 # Sales Tax Processor → available at /api/app/sales-tax-processor/* (prefix already defined in router)
 app.include_router(sales_tax_router)
+
+# Order Comparison → available at /api/app/order-comparison/* (prefix already defined in router)
+app.include_router(order_comparison_router)
 
 # Other modules later:
 # app.include_router(taxes_router, prefix="/api/taxes")

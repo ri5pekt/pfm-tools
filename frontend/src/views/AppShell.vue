@@ -6,7 +6,10 @@
                 <div class="logo">
                     <i class="pi pi-sliders-h"></i>
                 </div>
-                <span class="app-title">PFM Tools</span>
+                <div class="app-title-wrapper">
+                    <span class="app-title">PFM Tools</span>
+                    <span class="app-version">v{{ version }}</span>
+                </div>
             </div>
             <div class="header-right">
                 <div class="user-info" v-if="auth.state.user">
@@ -41,12 +44,36 @@
                         <span>Dashboard</span>
                     </RouterLink>
                     <RouterLink
+                        to="/app/tools"
+                        class="nav-item"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-wrench"></i>
+                        <span>Tools</span>
+                    </RouterLink>
+                    <RouterLink
                         to="/app/sales-tax-processor"
                         class="nav-item nav-item-child"
                         active-class="nav-item-active"
                     >
                         <i class="pi pi-file-export"></i>
-                        <span>Sales Tax Processor</span>
+                        <span>Sales Tax</span>
+                    </RouterLink>
+                    <RouterLink
+                        to="/app/order-comparison"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-sync"></i>
+                        <span>Order Comparison</span>
+                    </RouterLink>
+                    <RouterLink
+                        to="/app/scheduled-tasks"
+                        class="nav-item"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-clock"></i>
+                        <span>Scheduled Tasks</span>
                     </RouterLink>
                 </nav>
             </aside>
@@ -62,9 +89,11 @@
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../store/authStore";
 import Button from "primevue/button";
+import { APP_VERSION } from "../config/version";
 
 const router = useRouter();
 const auth = useAuthStore();
+const version = APP_VERSION;
 
 function handleLogout() {
     auth.logout();
@@ -81,8 +110,8 @@ function handleLogout() {
 }
 
 .app-header {
-    background: var(--surface-0);
-    border-bottom: 1px solid var(--surface-border);
+    background: white;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     padding: 1rem 2rem;
     display: flex;
     align-items: center;
@@ -114,11 +143,26 @@ function handleLogout() {
     font-size: 1.25rem;
 }
 
+.app-title-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
 .app-title {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-color);
     letter-spacing: -0.5px;
+    line-height: 1.2;
+}
+
+.app-version {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-color-secondary);
+    opacity: 0.7;
+    letter-spacing: 0.5px;
 }
 
 .header-right {

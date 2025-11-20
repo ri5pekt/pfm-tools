@@ -16,9 +16,24 @@ def get_default_queue() -> Queue:
     return Queue(settings.rq_default_queue, connection=conn)
 
 
-def enqueue_job(func, *args, **kwargs):
+def enqueue_job(func, *args, job_timeout=None, **kwargs):
+    """
+    Enqueue a job with optional timeout.
+
+    Args:
+        func: Function to execute
+        *args: Positional arguments for the function
+        job_timeout: Job timeout in seconds (default: RQ default, usually 180)
+                    This is passed to RQ's enqueue method, not the function
+        **kwargs: Additional keyword arguments for the function
+    """
     queue = get_default_queue()
-    return queue.enqueue(func, *args, **kwargs)
+    # job_timeout is for RQ, not the function, so we extract it
+    # and pass it separately to enqueue
+    if job_timeout is not None:
+        return queue.enqueue(func, *args, job_timeout=job_timeout, **kwargs)
+    else:
+        return queue.enqueue(func, *args, **kwargs)
 
 
 def cancel_job_by_id(job_id: int) -> bool:

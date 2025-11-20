@@ -4,7 +4,10 @@ import { useAuthStore } from "../store/authStore";
 
 import LoginView from "../views/LoginView.vue";
 import DashboardView from "../views/DashboardView.vue";
+import ToolsListView from "../views/ToolsListView.vue";
+import ScheduledTasksListView from "../views/ScheduledTasksListView.vue";
 import SalesTaxProcessorView from "../views/SalesTaxProcessorView.vue";
+import OrderComparisonView from "../views/OrderComparisonView.vue";
 
 const routes = [
     {
@@ -22,9 +25,24 @@ const routes = [
                 component: DashboardView,
             },
             {
+                path: "tools",
+                name: "tools",
+                component: ToolsListView,
+            },
+            {
+                path: "scheduled-tasks",
+                name: "scheduled-tasks",
+                component: ScheduledTasksListView,
+            },
+            {
                 path: "sales-tax-processor",
                 name: "sales-tax-processor",
                 component: SalesTaxProcessorView,
+            },
+            {
+                path: "order-comparison",
+                name: "order-comparison",
+                component: OrderComparisonView,
             },
             {
                 path: "",

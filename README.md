@@ -1,13 +1,32 @@
 # PFM Tools
 
+**Version:** 1.1.0
+
 A modern web application for processing sales tax data with integration to WooCommerce, Braintree, and AfterShip APIs.
 
 ## 🚀 Features
 
+### Tools
 - **Sales Tax Processing**: Upload and process CSV files for sales tax calculations
+- **Order Comparison Tool**: Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed PDF reports
+- More tools coming soon...
+
+### Scheduled Tasks
+- **Automated Workflows**: Replace Zapier workflows with native scheduled tasks
+- **Daily Stats Export**: Pull daily statistics and export to Google Sheets
+- **Task Management**: Each task includes:
+  - Report logs page with execution history
+  - Manual run button for on-demand execution
+  - Schedule configuration (cron-based)
+  - Status monitoring and notifications
+
+### Integrations
 - **WooCommerce Integration**: Connect with WooCommerce stores to fetch order data
 - **Braintree Integration**: Process payment transactions through Braintree
 - **AfterShip Integration**: Track shipments and delivery status
+- **Google Sheets Integration**: Export data to Google Sheets (planned)
+
+### Infrastructure
 - **Background Job Processing**: Asynchronous job processing with Redis Queue (RQ)
 - **User Authentication**: Secure JWT-based authentication system
 - **Modern UI**: Built with Vue.js 3 and PrimeVue components

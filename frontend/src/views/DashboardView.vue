@@ -1,38 +1,56 @@
 <template>
     <div class="dashboard-container">
-        <div class="dashboard-header">
-            <h1 class="dashboard-title">Welcome back!</h1>
-            <p class="dashboard-subtitle">
-                Here's what's happening with your tools today.
-            </p>
+        <div class="dashboard-background">
+            <div class="dashboard-background-gradient"></div>
+            <div class="dashboard-background-pattern"></div>
         </div>
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Welcome back!</h1>
+                <p class="dashboard-subtitle">
+                    Here's what's happening with your tools today.
+                </p>
+            </div>
 
-        <div class="dashboard-actions">
-            <Card class="feature-card">
-                <template #header>
-                    <div class="card-header">
-                        <div class="card-icon">
-                            <i class="pi pi-file-export"></i>
-                        </div>
-                        <h3 class="card-title">Sales Tax Processor</h3>
-                    </div>
-                </template>
+        <div class="dashboard-sections">
+            <!-- Tools Section -->
+            <Card class="section-card" @click="$router.push({ name: 'tools' })">
                 <template #content>
-                    <div class="card-content">
-                        <p class="card-description">
-                            Upload CSV files to process sales tax data. Compare tax calculations
-                            from WooCommerce and Braintree, identify discrepancies, and generate
-                            detailed reports for reconciliation.
+                    <div class="section-card-content">
+                        <div class="section-icon-wrapper">
+                            <i class="pi pi-wrench section-icon"></i>
+                        </div>
+                        <h2 class="section-card-title">Tools</h2>
+                        <p class="section-card-description">
+                            Access and manage your available tools for data processing and analysis.
                         </p>
-                        <Button
-                            label="Open Sales Tax Processor"
-                            icon="pi pi-arrow-right"
-                            class="card-button"
-                            @click="$router.push({ name: 'sales-tax-processor' })"
-                        />
+                        <div class="section-card-footer">
+                            <span class="section-card-link">View Tools</span>
+                            <i class="pi pi-arrow-right"></i>
+                        </div>
                     </div>
                 </template>
             </Card>
+
+            <!-- Scheduled Tasks Section -->
+            <Card class="section-card" @click="$router.push({ name: 'scheduled-tasks' })">
+                <template #content>
+                    <div class="section-card-content">
+                        <div class="section-icon-wrapper">
+                            <i class="pi pi-clock section-icon"></i>
+                        </div>
+                        <h2 class="section-card-title">Scheduled Tasks</h2>
+                        <p class="section-card-description">
+                            Manage automated workflows and scheduled tasks that run on a schedule.
+                        </p>
+                        <div class="section-card-footer">
+                            <span class="section-card-link">View Tasks</span>
+                            <i class="pi pi-arrow-right"></i>
+                        </div>
+                    </div>
+                </template>
+            </Card>
+        </div>
         </div>
     </div>
 </template>
@@ -44,9 +62,58 @@ import Button from "primevue/button";
 
 <style scoped>
 .dashboard-container {
-    max-width: 800px;
-    margin: 0 auto;
+    min-height: 100vh;
+    position: relative;
     padding: 2rem;
+    overflow: hidden;
+}
+
+.dashboard-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+}
+
+.dashboard-background-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    opacity: 0.9;
+}
+
+.dashboard-background-pattern {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+    animation: float 20s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-20px);
+    }
+}
+
+.dashboard-content {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .dashboard-header {
@@ -58,88 +125,103 @@ import Button from "primevue/button";
     font-size: 2.5rem;
     font-weight: 700;
     margin: 0 0 0.5rem;
-    color: var(--text-color);
+    color: white;
     letter-spacing: -0.5px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .dashboard-subtitle {
     font-size: 1.1rem;
-    color: var(--text-color-secondary);
+    color: rgba(255, 255, 255, 0.9);
     margin: 0;
+    text-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
 }
 
-.dashboard-actions {
-    display: flex;
-    justify-content: center;
+.dashboard-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
 }
 
-.feature-card {
-    width: 100%;
-    max-width: 600px;
-    border-radius: 12px;
+.section-card {
+    border-radius: 16px;
     border: 1px solid var(--surface-border);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    overflow: hidden;
 }
 
-.feature-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+.section-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
 }
 
-.card-header {
+.section-card-content {
+    padding: 2.5rem;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 1rem;
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--surface-border);
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+    text-align: center;
+    gap: 1.5rem;
 }
 
-.card-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+.section-icon-wrapper {
+    width: 80px;
+    height: 80px;
+    border-radius: 16px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.section-icon {
+    font-size: 2.5rem;
     color: white;
-    flex-shrink: 0;
 }
 
-.card-icon i {
-    font-size: 1.5rem;
-}
-
-.card-title {
+.section-card-title {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.75rem;
     font-weight: 700;
     color: var(--text-color);
     letter-spacing: -0.3px;
 }
 
-.card-content {
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.card-description {
+.section-card-description {
     margin: 0;
     font-size: 1rem;
     line-height: 1.6;
     color: var(--text-color-secondary);
+    max-width: 300px;
 }
 
-.card-button {
-    width: 100%;
-    height: 3rem;
-    font-size: 1rem;
+.section-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--primary-color);
     font-weight: 600;
-    border-radius: 8px;
+    margin-top: 0.5rem;
+}
+
+.section-card-link {
+    font-size: 1rem;
+}
+
+.section-card-footer i {
+    font-size: 0.9rem;
+    transition: transform 0.2s;
+}
+
+.section-card:hover .section-card-footer i {
+    transform: translateX(4px);
 }
 
 @media (max-width: 768px) {
@@ -151,19 +233,29 @@ import Button from "primevue/button";
         font-size: 2rem;
     }
 
-    .card-header {
-        padding: 1.25rem;
+    .dashboard-sections {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
     }
 
-    .card-content {
-        padding: 1.25rem;
+    .section-card-content {
+        padding: 2rem 1.5rem;
     }
 
-    .card-title {
-        font-size: 1.25rem;
+    .section-icon-wrapper {
+        width: 64px;
+        height: 64px;
     }
 
-    .card-description {
+    .section-icon {
+        font-size: 2rem;
+    }
+
+    .section-card-title {
+        font-size: 1.5rem;
+    }
+
+    .section-card-description {
         font-size: 0.95rem;
     }
 }

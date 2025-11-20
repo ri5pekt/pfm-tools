@@ -9,7 +9,7 @@ from app.features.sales_tax_processor.worker import run_sales_tax_job  # noqa
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,  # Temporarily set to DEBUG to see full request details
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
