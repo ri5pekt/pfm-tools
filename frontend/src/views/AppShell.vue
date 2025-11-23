@@ -44,14 +44,6 @@
                         <span>Dashboard</span>
                     </RouterLink>
                     <RouterLink
-                        to="/app/tools"
-                        class="nav-item"
-                        active-class="nav-item-active"
-                    >
-                        <i class="pi pi-wrench"></i>
-                        <span>Tools</span>
-                    </RouterLink>
-                    <RouterLink
                         to="/app/sales-tax-processor"
                         class="nav-item nav-item-child"
                         active-class="nav-item-active"
@@ -68,12 +60,12 @@
                         <span>Order Comparison</span>
                     </RouterLink>
                     <RouterLink
-                        to="/app/scheduled-tasks"
-                        class="nav-item"
+                        to="/app/ulta-marketplace"
+                        class="nav-item nav-item-child"
                         active-class="nav-item-active"
                     >
-                        <i class="pi pi-clock"></i>
-                        <span>Scheduled Tasks</span>
+                        <i class="pi pi-shopping-cart"></i>
+                        <span>Ulta Marketplace</span>
                     </RouterLink>
                 </nav>
             </aside>

@@ -50,6 +50,22 @@ class Settings(BaseSettings):
     aftership_password: Optional[str] = None
     aftership_base_url: Optional[str] = None
 
+    # Ulta Marketplace API config (optional)
+    ulta_api_key: Optional[str] = None
+
+    # Google Sheets API config (optional)
+    # OAuth 2.0 credentials (for organization projects that don't allow service account keys)
+    google_sheets_oauth_credentials_path: Optional[str] = None  # Path to OAuth client credentials JSON file
+    google_sheets_oauth_token_path: Optional[str] = None  # Path to saved OAuth token (created by setup script)
+    # Service account (alternative - if your org allows service account keys)
+    google_sheets_service_account_path: Optional[str] = None  # Path to service account JSON file
+    # Spreadsheet settings (supports both GOOGLE_SHEETS_* and ULTA_GOOGLE_SHEETS_* prefixes)
+    google_sheets_spreadsheet_id: Optional[str] = None  # Google Sheets spreadsheet ID
+    google_sheets_sheet_name: Optional[str] = "Ulta Exports"  # Default sheet name
+    # Alternative naming with ULTA_ prefix (for backward compatibility)
+    ulta_google_sheets_spreadsheet_id: Optional[str] = None  # Alternative: ULTA_GOOGLE_SHEETS_SPREADSHEET_ID
+    ulta_google_sheets_sheet_name: Optional[str] = None  # Alternative: ULTA_GOOGLE_SHEETS_SHEET_NAME
+
     # Where to read env vars from
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -64,6 +64,20 @@ services:
         command: >
             python -m worker
 
+    scheduler:
+        build:
+            context: ./backend
+        env_file:
+            - .env
+        volumes:
+            - ./backend:/app
+            - ./data:/data
+        depends_on:
+            - redis
+            - db
+        command: >
+            sh -c "python scheduler.py && exec rqscheduler --url $${REDIS_URL} --interval 1 --verbose"
+
     # Frontend (optional - you can also run 'npm run dev' in frontend/ directory)
     # Uncomment to use Docker container instead of dev server
     # frontend:

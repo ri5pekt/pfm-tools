@@ -6,6 +6,8 @@ from app.core.config import get_settings
 
 # Import job functions so RQ can find them
 from app.features.sales_tax_processor.worker import run_sales_tax_job  # noqa
+from app.features.order_comparison.worker import run_comparison_job  # noqa
+from app.features.ulta_marketplace.worker import run_ulta_export_job  # noqa
 
 # Configure logging
 logging.basicConfig(

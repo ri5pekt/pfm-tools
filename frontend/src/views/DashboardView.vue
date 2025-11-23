@@ -8,43 +8,62 @@
             <div class="dashboard-header">
                 <h1 class="dashboard-title">Welcome back!</h1>
                 <p class="dashboard-subtitle">
-                    Here's what's happening with your tools today.
+                    Select a service to get started.
                 </p>
             </div>
 
         <div class="dashboard-sections">
-            <!-- Tools Section -->
-            <Card class="section-card" @click="$router.push({ name: 'tools' })">
+            <!-- Sales Tax Service -->
+            <Card class="section-card" @click="$router.push({ name: 'sales-tax-processor' })">
                 <template #content>
                     <div class="section-card-content">
                         <div class="section-icon-wrapper">
-                            <i class="pi pi-wrench section-icon"></i>
+                            <i class="pi pi-file-export section-icon"></i>
                         </div>
-                        <h2 class="section-card-title">Tools</h2>
+                        <h2 class="section-card-title">Sales Tax</h2>
                         <p class="section-card-description">
-                            Access and manage your available tools for data processing and analysis.
+                            Process sales tax data from CSV files with integration to WooCommerce, Braintree, and AfterShip.
                         </p>
                         <div class="section-card-footer">
-                            <span class="section-card-link">View Tools</span>
+                            <span class="section-card-link">Open Service</span>
                             <i class="pi pi-arrow-right"></i>
                         </div>
                     </div>
                 </template>
             </Card>
 
-            <!-- Scheduled Tasks Section -->
-            <Card class="section-card" @click="$router.push({ name: 'scheduled-tasks' })">
+            <!-- Order Comparison Service -->
+            <Card class="section-card" @click="$router.push({ name: 'order-comparison' })">
                 <template #content>
                     <div class="section-card-content">
                         <div class="section-icon-wrapper">
-                            <i class="pi pi-clock section-icon"></i>
+                            <i class="pi pi-sync section-icon"></i>
                         </div>
-                        <h2 class="section-card-title">Scheduled Tasks</h2>
+                        <h2 class="section-card-title">Order Comparison</h2>
                         <p class="section-card-description">
-                            Manage automated workflows and scheduled tasks that run on a schedule.
+                            Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed PDF reports.
                         </p>
                         <div class="section-card-footer">
-                            <span class="section-card-link">View Tasks</span>
+                            <span class="section-card-link">Open Service</span>
+                            <i class="pi pi-arrow-right"></i>
+                        </div>
+                    </div>
+                </template>
+            </Card>
+
+            <!-- Ulta Marketplace Service -->
+            <Card class="section-card" @click="$router.push({ name: 'ulta-marketplace' })">
+                <template #content>
+                    <div class="section-card-content">
+                        <div class="section-icon-wrapper ulta-logo-wrapper">
+                            <img src="@/assets/images/logo-ulta.svg" alt="Ulta" class="ulta-logo" />
+                        </div>
+                        <h2 class="section-card-title">Ulta Marketplace</h2>
+                        <p class="section-card-description">
+                            Manage and process Ulta marketplace orders and data.
+                        </p>
+                        <div class="section-card-footer">
+                            <span class="section-card-link">Open Service</span>
                             <i class="pi pi-arrow-right"></i>
                         </div>
                     </div>
@@ -139,9 +158,9 @@ import Button from "primevue/button";
 
 .dashboard-sections {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 2rem;
-    max-width: 900px;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -184,6 +203,18 @@ import Button from "primevue/button";
 .section-icon {
     font-size: 2.5rem;
     color: white;
+}
+
+.ulta-logo-wrapper {
+    background: transparent !important;
+    border: none;
+}
+
+.ulta-logo {
+    max-width: 150px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
 }
 
 .section-card-title {

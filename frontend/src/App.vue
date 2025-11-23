@@ -69,4 +69,29 @@ html {
     margin: 0;
     line-height: 1.6;
 }
+
+/* Shared service container styles */
+.service-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.service-page-header {
+    margin-bottom: 2rem;
+}
+
+.service-page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+    color: var(--text-color);
+    letter-spacing: -0.5px;
+}
+
+.service-page-subtitle {
+    font-size: 1rem;
+    color: var(--text-color-secondary);
+    margin: 0;
+}
 </style>

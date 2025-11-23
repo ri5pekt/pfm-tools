@@ -25,3 +25,13 @@ data/uploads/
 
 # Test/example files
 order_*.json
+test_*.py
+test_*.js
+ulta-response.json
+
+# Google OAuth credentials (keep secure, don't commit)
+backend/credentials.json
+backend/credentials/
+backend/google_sheets_token.pickle
+backend/*credentials*.json
+backend/*.pickle

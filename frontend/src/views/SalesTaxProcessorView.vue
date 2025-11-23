@@ -1,9 +1,9 @@
 <template>
-    <div class="sales-tax-container">
+    <div class="service-container">
         <ConfirmDialog />
-        <div class="page-header">
-            <h1 class="page-title">Sales Tax Processor</h1>
-            <p class="page-subtitle">
+        <div class="service-page-header">
+            <h1 class="service-page-title">Sales Tax Processor</h1>
+            <p class="service-page-subtitle">
                 Upload CSV files to process and compare sales tax data
             </p>
         </div>
@@ -403,29 +403,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.sales-tax-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-}
-
-.page-header {
-    margin-bottom: 2rem;
-}
-
-.page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem;
-    color: var(--text-color);
-    letter-spacing: -0.5px;
-}
-
-.page-subtitle {
-    font-size: 1rem;
-    color: var(--text-color-secondary);
-    margin: 0;
-}
 
 .upload-card,
 .jobs-card {
@@ -729,11 +706,11 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-    .sales-tax-container {
+    .service-container {
         padding: 1rem;
     }
 
-    .page-title {
+    .service-page-title {
         font-size: 1.75rem;
     }
 

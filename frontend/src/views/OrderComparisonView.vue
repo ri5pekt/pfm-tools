@@ -1,9 +1,9 @@
 <template>
-    <div class="order-comparison-container">
+    <div class="service-container">
         <ConfirmDialog />
-        <div class="page-header">
-            <h1 class="page-title">Order Comparison Tool</h1>
-            <p class="page-subtitle">
+        <div class="service-page-header">
+            <h1 class="service-page-title">Order Comparison Tool</h1>
+            <p class="service-page-subtitle">
                 Compare Complyt invoice reports with WooCommerce orders and refunds
             </p>
         </div>
@@ -437,23 +437,6 @@ onUnmounted(() => {
     padding: 2rem;
 }
 
-.page-header {
-    margin-bottom: 2rem;
-}
-
-.page-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem;
-    color: var(--text-color);
-    letter-spacing: -0.5px;
-}
-
-.page-subtitle {
-    font-size: 1rem;
-    color: var(--text-color-secondary);
-    margin: 0;
-}
 
 .upload-card,
 .jobs-card {
