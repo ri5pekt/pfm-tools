@@ -1,9 +1,11 @@
 // frontend/src/api/inventoryDataApi.js
 import { http } from "./http";
 
-export async function createExport(isManual = true, exportDateDisplay = null) {
+export async function createExport(isManual = true, exportDateDisplay = null, exportToFile = true, exportToGoogleSheets = true) {
     const body = {
         is_manual: isManual,
+        export_to_file: exportToFile,
+        export_to_google_sheets: exportToGoogleSheets,
     };
 
     // Include display date if provided (for showing correct date in UI)

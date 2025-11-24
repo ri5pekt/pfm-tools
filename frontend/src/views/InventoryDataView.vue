@@ -269,11 +269,35 @@
                         <span>This export will use today's current data ({{ formatTodayDate() }})</span>
                     </div>
 
+                    <div class="export-options">
+                        <div class="export-option-item">
+                            <Checkbox
+                                id="export-to-file"
+                                v-model="exportToFile"
+                                :binary="true"
+                            />
+                            <label for="export-to-file">Export to File (CSV/ZIP)</label>
+                        </div>
+                        <div class="export-option-item">
+                            <Checkbox
+                                id="export-to-google-sheets"
+                                v-model="exportToGoogleSheets"
+                                :binary="true"
+                            />
+                            <label for="export-to-google-sheets">Export to Google Sheets</label>
+                        </div>
+                    </div>
+
+                    <div v-if="!exportToFile && !exportToGoogleSheets" class="export-warning">
+                        <i class="pi pi-exclamation-triangle"></i>
+                        <span>Please select at least one export option</span>
+                    </div>
+
                     <Button
                         label="Run Export"
                         icon="pi pi-play"
                         class="process-button"
-                        :disabled="processing"
+                        :disabled="processing || (!exportToFile && !exportToGoogleSheets)"
                         :loading="processing"
                         type="submit"
                     />
@@ -334,7 +358,7 @@
                             </div>
                             <div class="job-actions">
                                 <Button
-                                    v-if="job.status === 'done'"
+                                    v-if="job.status === 'done' && hasFileOutput(job)"
                                     icon="pi pi-download"
                                     severity="success"
                                     text
@@ -408,6 +432,8 @@ const scheduledExports = ref([]);
 const showCreateDialog = ref(false);
 const editingScheduled = ref(false);
 const savingScheduled = ref(false);
+const exportToFile = ref(true);
+const exportToGoogleSheets = ref(true);
 
 const scheduledForm = ref({
     name: "",
@@ -523,6 +549,12 @@ const getProgressText = (job) => {
     return `${message} (${progress}%)`;
 };
 
+const hasFileOutput = (job) => {
+    // Only show download button if a file was actually created
+    // If export_to_file was false, output_filename will be null/undefined
+    return !!job.output_filename;
+};
+
 const handleManualExport = async () => {
     // Get today's date in the format needed for the API
     const today = new Date();
@@ -533,7 +565,7 @@ const handleManualExport = async () => {
 
     processing.value = true;
     try {
-        const response = await createExport(true, exportDateDisplay);
+        const response = await createExport(true, exportDateDisplay, exportToFile.value, exportToGoogleSheets.value);
         toast.add({
             severity: "success",
             summary: "Export Started",
@@ -1372,6 +1404,46 @@ onUnmounted(() => {
 .form-field small {
     display: block;
     margin-top: 0.25rem;
+}
+
+.export-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: var(--surface-50);
+    border-radius: 8px;
+}
+
+.export-option-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.export-option-item label {
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    user-select: none;
+}
+
+.export-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--orange-50);
+    border: 1px solid var(--orange-200);
+    border-radius: 8px;
+    color: var(--orange-700);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.export-warning i {
+    font-size: 1.1rem;
 }
 </style>
 

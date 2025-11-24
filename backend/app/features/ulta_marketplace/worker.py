@@ -6,7 +6,7 @@ from datetime import datetime
 from ...core.config import get_settings
 from ...core.db import SessionLocal
 from ...jobs.models import Job
-from .service import fetch_ulta_orders
+from .service import fetch_ulta_orders, export_to_google_sheets
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -84,38 +84,52 @@ def run_ulta_export_job(job_id: int):
             db.commit()
             return
 
-        # Update progress
+        # Check if file export is enabled
+        export_to_file = options.get("export_to_file", True)  # Default to True for backward compatibility
+
+        # Update progress based on export options
         new_options = dict(options)
-        new_options['progress'] = 50
-        new_options['status_message'] = 'Processing orders...'
+        if export_to_file:
+            new_options['progress'] = 50
+            new_options['status_message'] = 'Processing orders...'
+        else:
+            new_options['progress'] = 60
+            new_options['status_message'] = 'Processing orders...'
         job.options = new_options
         db.commit()
         db.refresh(job)
 
-        # Save to CSV
-        output_path = os.path.join(
-            settings.processed_dir,
-            f"ulta_export_{job.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
-        )
+        output_path = None
+        if export_to_file:
+            # Save to CSV
+            output_path = os.path.join(
+                settings.processed_dir,
+                f"ulta_export_{job.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+            )
 
-        from .service import save_ulta_orders_to_csv, export_to_google_sheets
-        try:
-            save_ulta_orders_to_csv(orders_data, output_path, start_date=start_date, end_date=end_date)
-            logger.info(f"CSV file saved: {output_path}")
-        except Exception as e:
-            logger.error(f"Error saving CSV file: {str(e)}", exc_info=True)
-            job.status = "error"
-            job.error_message = f"Failed to save CSV: {str(e)}"
-            db.commit()
-            return
+            from .service import save_ulta_orders_to_csv
+            try:
+                save_ulta_orders_to_csv(orders_data, output_path, start_date=start_date, end_date=end_date)
+                logger.info(f"CSV file saved: {output_path}")
+            except Exception as e:
+                logger.error(f"Error saving CSV file: {str(e)}", exc_info=True)
+                job.status = "error"
+                job.error_message = f"Failed to save CSV: {str(e)}"
+                db.commit()
+                return
+        else:
+            logger.info("File export is disabled, skipping CSV creation")
 
-        # Export to Google Sheets if configured
+        # Export to Google Sheets if enabled and configured
+        export_to_google_sheets_flag = options.get("export_to_google_sheets", True)  # Default to True for backward compatibility
+
         # Support both GOOGLE_SHEETS_* and ULTA_GOOGLE_SHEETS_* naming
         # Check ULTA_ prefix first since it's more specific, then fall back to generic
         spreadsheet_id = settings.ulta_google_sheets_spreadsheet_id or settings.google_sheets_spreadsheet_id
         sheet_name = settings.ulta_google_sheets_sheet_name or settings.google_sheets_sheet_name or "Ulta Exports"
 
         logger.info(f"Google Sheets export check:")
+        logger.info(f"  Export to Google Sheets flag: {export_to_google_sheets_flag}")
         logger.info(f"  Spreadsheet ID: {spreadsheet_id}")
         logger.info(f"  Sheet name: {sheet_name}")
         logger.info(f"  OAuth credentials path: {settings.google_sheets_oauth_credentials_path}")
@@ -124,6 +138,7 @@ def run_ulta_export_job(job_id: int):
 
         # Check for either OAuth or Service Account credentials
         google_sheets_enabled = (
+            export_to_google_sheets_flag and
             spreadsheet_id and
             (
                 (settings.google_sheets_oauth_credentials_path and settings.google_sheets_oauth_token_path) or
@@ -177,7 +192,8 @@ def run_ulta_export_job(job_id: int):
         job.options = new_options
 
         job.status = "done"
-        job.output_filename = output_path
+        if output_path:
+            job.output_filename = output_path
         db.commit()
         logger.info(f"Job {job_id} completed successfully")
 

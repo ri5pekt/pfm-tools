@@ -220,25 +220,52 @@ def run_inventory_data_export_job(job_id: int):
         # db.commit()
         # db.refresh(job)
 
-        # Update progress
+        # Check if file export is enabled
+        export_to_file = options.get("export_to_file", True)  # Default to True for backward compatibility
+
+        # Update progress based on export options
         new_options = dict(options)
-        new_options['progress'] = 80
-        new_options['status_message'] = 'Creating ZIP archive...'
+        if export_to_file:
+            new_options['progress'] = 80
+            new_options['status_message'] = 'Creating ZIP archive...'
+        else:
+            new_options['progress'] = 90
+            new_options['status_message'] = 'Preparing for export...'
         job.options = new_options
         db.commit()
         db.refresh(job)
 
-        # Create ZIP archive with all CSV files
-        zip_path = os.path.join(
-            settings.processed_dir,
-            f"inventory_data_export_{job.id}_{timestamp}.zip"
-        )
+        zip_path = None
+        if export_to_file:
+            # Create ZIP archive with all CSV files
+            zip_path = os.path.join(
+                settings.processed_dir,
+                f"inventory_data_export_{job.id}_{timestamp}.zip"
+            )
 
-        try:
-            create_inventory_zip(csv_files, zip_path)
-            logger.info(f"Created ZIP archive: {zip_path}")
+            try:
+                create_inventory_zip(csv_files, zip_path)
+                logger.info(f"Created ZIP archive: {zip_path}")
 
-            # Clean up individual CSV files after creating ZIP
+                # Clean up individual CSV files after creating ZIP
+                for csv_file in csv_files:
+                    csv_path = csv_file.get("path")
+                    if csv_path and os.path.exists(csv_path):
+                        try:
+                            os.remove(csv_path)
+                            logger.info(f"Cleaned up CSV file: {csv_path}")
+                        except Exception as e:
+                            logger.warning(f"Could not delete CSV file {csv_path}: {str(e)}")
+
+            except Exception as e:
+                logger.error(f"Error creating ZIP archive: {str(e)}", exc_info=True)
+                job.status = "error"
+                job.error_message = f"Failed to create ZIP archive: {str(e)}"
+                db.commit()
+                return
+        else:
+            logger.info("File export is disabled, skipping ZIP creation")
+            # Clean up individual CSV files since we're not creating a ZIP
             for csv_file in csv_files:
                 csv_path = csv_file.get("path")
                 if csv_path and os.path.exists(csv_path):
@@ -248,17 +275,13 @@ def run_inventory_data_export_job(job_id: int):
                     except Exception as e:
                         logger.warning(f"Could not delete CSV file {csv_path}: {str(e)}")
 
-        except Exception as e:
-            logger.error(f"Error creating ZIP archive: {str(e)}", exc_info=True)
-            job.status = "error"
-            job.error_message = f"Failed to create ZIP archive: {str(e)}"
-            db.commit()
-            return
+        # Export to Google Sheets if enabled and configured
+        export_to_google_sheets_flag = options.get("export_to_google_sheets", True)  # Default to True for backward compatibility
 
-        # Export to Google Sheets if configured
         # Use inventory-specific spreadsheet ID if available, otherwise fall back to general one
         spreadsheet_id = settings.inventory_google_sheets_spreadsheet_id or settings.google_sheets_spreadsheet_id
         google_sheets_enabled = (
+            export_to_google_sheets_flag and
             spreadsheet_id and
             (
                 (settings.google_sheets_oauth_credentials_path and settings.google_sheets_oauth_token_path) or
@@ -372,7 +395,8 @@ def run_inventory_data_export_job(job_id: int):
         job.options = new_options
 
         job.status = "done"
-        job.output_filename = zip_path
+        if zip_path:
+            job.output_filename = zip_path
         db.commit()
         logger.info(f"Job {job_id} completed successfully")
 

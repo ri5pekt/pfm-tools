@@ -64,6 +64,8 @@ def create_export(
             "is_manual": request.is_manual,
             "export_date": export_date,
             "export_date_display": export_date_display,
+            "export_to_file": request.export_to_file,
+            "export_to_google_sheets": request.export_to_google_sheets,
             "zenventory_username": zenventory_username,
             "zenventory_password": zenventory_password,
             "zenventory_base_url": zenventory_base_url,

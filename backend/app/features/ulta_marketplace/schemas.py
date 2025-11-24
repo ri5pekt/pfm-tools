@@ -9,6 +9,8 @@ class UltaExportRequest(BaseModel):
     is_manual: bool = True  # True for manual runs, False for scheduled
     start_date_display: str = None  # Original selected start date (YYYY-MM-DD) for display
     end_date_display: str = None    # Original selected end date (YYYY-MM-DD) for display
+    export_to_file: bool = True  # Export to CSV file
+    export_to_google_sheets: bool = True  # Export to Google Sheets
 
 
 class UltaExportResponse(BaseModel):

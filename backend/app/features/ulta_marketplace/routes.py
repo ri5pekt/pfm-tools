@@ -60,6 +60,8 @@ def create_export(
             "start_date": request.start_date,
             "end_date": request.end_date,
             "is_manual": request.is_manual,
+            "export_to_file": request.export_to_file,
+            "export_to_google_sheets": request.export_to_google_sheets,
             "ulta_api_key": ulta_api_key,
             "progress": 0,
             "status_message": "Queued for processing",

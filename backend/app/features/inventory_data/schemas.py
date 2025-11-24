@@ -6,6 +6,8 @@ from datetime import datetime, time
 class InventoryDataExportRequest(BaseModel):
     is_manual: bool = True  # True for manual runs, False for scheduled
     export_date_display: Optional[str] = None  # Export date (YYYY-MM-DD) for display
+    export_to_file: bool = True  # Export to CSV/ZIP file
+    export_to_google_sheets: bool = True  # Export to Google Sheets
 
 
 class InventoryDataExportResponse(BaseModel):

@@ -1,11 +1,13 @@
 // frontend/src/api/ultaMarketplaceApi.js
 import { http } from "./http";
 
-export async function createExport(startDate, endDate, isManual = true, startDateDisplay = null, endDateDisplay = null) {
+export async function createExport(startDate, endDate, isManual = true, startDateDisplay = null, endDateDisplay = null, exportToFile = true, exportToGoogleSheets = true) {
     const body = {
         start_date: startDate,
         end_date: endDate,
         is_manual: isManual,
+        export_to_file: exportToFile,
+        export_to_google_sheets: exportToGoogleSheets,
     };
 
     // Include display dates if provided (for showing correct dates in UI)
