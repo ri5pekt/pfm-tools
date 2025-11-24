@@ -68,6 +68,23 @@ services:
         command: >
             python -m worker
 
+    scheduler:
+        build:
+            context: ./backend
+        env_file:
+            - .env
+        volumes:
+            - ./data:/data
+            - ./backend/credentials:/app/credentials
+        depends_on:
+            redis:
+                condition: service_healthy
+            db:
+                condition: service_healthy
+        restart: unless-stopped
+        command: >
+            sh -c "python scheduler.py && exec rqscheduler --url $${REDIS_URL} --interval 1 --verbose"
+
     frontend:
         build:
             context: ./frontend
