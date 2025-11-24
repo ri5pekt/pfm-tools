@@ -35,7 +35,7 @@ services:
             - .env
         volumes:
             - ./data:/data
-            - ./backend/credentials:/app/credentials:ro
+            - ./backend/credentials:/app/credentials
         depends_on:
             db:
                 condition: service_healthy
@@ -58,7 +58,7 @@ services:
             - .env
         volumes:
             - ./data:/data
-            - ./backend/credentials:/app/credentials:ro
+            - ./backend/credentials:/app/credentials
         depends_on:
             backend:
                 condition: service_started
