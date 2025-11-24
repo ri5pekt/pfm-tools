@@ -1,30 +1,44 @@
 # PFM Tools
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 
-A modern web application for processing sales tax data with integration to WooCommerce, Braintree, and AfterShip APIs.
+A modern web application for processing sales tax data, managing inventory, and exporting marketplace data with integration to WooCommerce, Braintree, AfterShip, Ulta Marketplace, Zenventory, ShipBob, and Google Sheets.
 
 ## 🚀 Features
 
 ### Tools
 - **Sales Tax Processing**: Upload and process CSV files for sales tax calculations
 - **Order Comparison Tool**: Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed PDF reports
-- More tools coming soon...
+- **Inventory Data Management**: Aggregate inventory data from Zenventory and ShipBob APIs, export to CSV/ZIP and Google Sheets
+- **Ulta Marketplace Exports**: Export Ulta Marketplace order data with date range selection, export to CSV and Google Sheets
 
-### Scheduled Tasks
-- **Automated Workflows**: Replace Zapier workflows with native scheduled tasks
-- **Daily Stats Export**: Pull daily statistics and export to Google Sheets
-- **Task Management**: Each task includes:
-  - Report logs page with execution history
-  - Manual run button for on-demand execution
-  - Schedule configuration (cron-based)
-  - Status monitoring and notifications
+### Scheduled Exports
+- **Flexible Scheduling**: Create scheduled exports with multiple periods:
+  - Minute-based (for testing)
+  - Daily (with time selection)
+  - Weekly (with day of week selection)
+  - Monthly (with day of month selection)
+- **Frequency Control**: Set frequency for all periods (e.g., every 5 minutes, every 3 days)
+- **Export Options**: Choose export destinations:
+  - Export to File (CSV/ZIP)
+  - Export to Google Sheets
+  - Or both
+- **CRUD Interface**: Full management interface for scheduled exports:
+  - Create new scheduled exports
+  - View list of all scheduled exports
+  - Edit existing scheduled exports
+  - Enable/disable scheduled exports
+  - Delete scheduled exports
+- **Manual Exports**: Run exports on-demand with selective export options
 
 ### Integrations
 - **WooCommerce Integration**: Connect with WooCommerce stores to fetch order data
 - **Braintree Integration**: Process payment transactions through Braintree
 - **AfterShip Integration**: Track shipments and delivery status
-- **Google Sheets Integration**: Export data to Google Sheets (planned)
+- **Ulta Marketplace API**: Fetch and export order data from Ulta Marketplace
+- **Zenventory API**: Fetch inventory data from Zenventory KLB
+- **ShipBob API**: Fetch inventory data from ShipBob fulfillment centers
+- **Google Sheets Integration**: Export data directly to Google Sheets with OAuth 2.0 authentication
 
 ### Infrastructure
 - **Background Job Processing**: Asynchronous job processing with Redis Queue (RQ)
@@ -163,6 +177,21 @@ AFTERSHIP_USERNAME=your-username
 AFTERSHIP_PASSWORD=your-password
 AFTERSHIP_BASE_URL=https://api.us.afterpay.com
 
+# Ulta Marketplace API
+ULTA_API_KEY=your-ulta-api-key
+ULTA_GOOGLE_SHEETS_SPREADSHEET_ID=your-ulta-spreadsheet-id
+ULTA_GOOGLE_SHEETS_SHEET_NAME=Main
+
+# Inventory Data APIs
+ZENVENTORY_KLB_USERNAME=your-zenventory-username
+ZENVENTORY_KLB_PASSWORD=your-zenventory-password
+SHIPBOB_API_KEY=your-shipbob-api-key
+INVENTORY_GOOGLE_SHEETS_SPREADSHEET_ID=your-inventory-spreadsheet-id
+
+# Google Sheets OAuth Configuration
+GOOGLE_SHEETS_OAUTH_CREDENTIALS_PATH=credentials/client_secret_google_sheets.json
+GOOGLE_SHEETS_OAUTH_TOKEN_PATH=credentials/google_sheets_token.pickle
+
 # Frontend Build
 VITE_API_BASE_URL=http://localhost:8000/api
 ```
@@ -183,8 +212,10 @@ For detailed production deployment instructions, see [README_PRODUCTION.md](READ
 2. **Build and start**
    ```bash
    docker compose -f docker-compose.prod.yml build
-   docker compose -f docker-compose.prod.yml up -d --scale worker=2
+   docker compose -f docker-compose.prod.yml up -d --scale worker=3
    ```
+   
+   **Note:** The scheduler service is required for scheduled exports to work. It starts automatically with the above command.
 
 3. **Set up Nginx reverse proxy** (see production guide)
 
@@ -276,6 +307,18 @@ docker-compose logs -f worker
 - Check worker containers are running
 - Verify Redis connection
 - Check worker logs: `docker-compose logs worker`
+
+**Scheduled exports not triggering:**
+- Verify scheduler service is running: `docker-compose ps scheduler`
+- Check scheduler logs: `docker-compose logs scheduler`
+- Ensure scheduled exports are enabled in the UI
+- Verify Redis connection for scheduler
+
+**Google Sheets export not working:**
+- Check credentials files exist: `ls -la backend/credentials/`
+- Verify credentials are mounted in containers (check docker-compose.yml volumes)
+- Ensure OAuth token is not expired (it auto-refreshes if writable)
+- Check worker logs for Google Sheets errors
 
 ## 🧪 Development
 
