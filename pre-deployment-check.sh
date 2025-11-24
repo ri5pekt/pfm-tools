@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Pre-Deployment Check Script for PFM Tools v1.1.0
+# Pre-Deployment Check Script for PFM Tools v1.2.0
 # Run this on your production server via SSH
 
 echo "=========================================="
-echo "PFM Tools v1.1.0 Pre-Deployment Checks"
+echo "PFM Tools v1.2.0 Pre-Deployment Checks"
 echo "=========================================="
 echo ""
 
@@ -128,9 +128,9 @@ echo "6. Checking for dependency changes..."
 if [ -f "backend/requirements.txt" ]; then
     check_status "requirements.txt found"
 
-    # Check if reportlab is in requirements (new in v1.1.0)
+    # Check if reportlab is in requirements (required for v1.1.0+)
     if grep -q "reportlab" backend/requirements.txt; then
-        check_status "reportlab dependency found (required for v1.1.0)"
+        check_status "reportlab dependency found (required for v1.1.0+)"
     else
         echo -e "${YELLOW}⚠${NC} reportlab not found in requirements.txt (may need to be added)"
     fi
