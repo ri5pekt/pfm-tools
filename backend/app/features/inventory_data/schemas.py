@@ -1,22 +1,19 @@
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, time
 
 
-class UltaExportRequest(BaseModel):
-    start_date: str  # ISO format: 2025-11-01T00:00:00Z
-    end_date: str    # ISO format: 2025-11-01T23:59:00Z
+class InventoryDataExportRequest(BaseModel):
     is_manual: bool = True  # True for manual runs, False for scheduled
-    start_date_display: str = None  # Original selected start date (YYYY-MM-DD) for display
-    end_date_display: str = None    # Original selected end date (YYYY-MM-DD) for display
+    export_date_display: Optional[str] = None  # Export date (YYYY-MM-DD) for display
 
 
-class UltaExportResponse(BaseModel):
+class InventoryDataExportResponse(BaseModel):
     job_id: int
     message: str
 
 
-class UltaJobStatus(BaseModel):
+class InventoryDataJobStatus(BaseModel):
     id: int
     status: str
     created_at: datetime
@@ -26,7 +23,7 @@ class UltaJobStatus(BaseModel):
     options: Optional[dict] = None
 
 
-# Scheduled Export Schemas (same as inventory_data, but kept separate for feature isolation)
+# Scheduled Export Schemas
 class ScheduledExportCreate(BaseModel):
     name: str
     period: str  # "minute", "daily", "weekly", "monthly"

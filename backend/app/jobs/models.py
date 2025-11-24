@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, Integer, String, Text, Boolean, Time
 from sqlalchemy.dialects.postgresql import JSONB  # if using Postgres
 from ..core.db import Base
 
@@ -14,6 +14,26 @@ class Job(Base):
     output_filename = Column(String(255), nullable=True)
     options = Column(JSONB, nullable=True)
     error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ScheduledExport(Base):
+    __tablename__ = "scheduled_exports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    feature = Column(String(100), nullable=False)  # e.g. "inventory_data"
+    name = Column(String(255), nullable=False)  # User-friendly name for the scheduled export
+    period = Column(String(50), nullable=False)  # "minute", "daily", "weekly", "monthly"
+    frequency = Column(Integer, default=1)  # Frequency: every X minutes/days/weeks/months
+    time = Column(Time, nullable=True)  # Time of day (for daily/weekly/monthly, not needed for minute)
+    day_of_week = Column(Integer, nullable=True)  # 0-6 for weekly (0=Monday, 6=Sunday)
+    day_of_month = Column(Integer, nullable=True)  # 1-31 for monthly
+    timezone = Column(String(100), default="UTC")  # Timezone for the schedule
+    enabled = Column(Boolean, default=True)  # Whether the schedule is active
+    rq_job_id = Column(String(255), nullable=True)  # RQ Scheduler job ID for tracking
+    options = Column(JSONB, nullable=True)  # Additional options (e.g., export settings)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

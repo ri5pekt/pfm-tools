@@ -1,38 +1,35 @@
-// frontend/src/api/ultaMarketplaceApi.js
+// frontend/src/api/inventoryDataApi.js
 import { http } from "./http";
 
-export async function createExport(startDate, endDate, isManual = true, startDateDisplay = null, endDateDisplay = null) {
+export async function createExport(isManual = true, exportDateDisplay = null) {
     const body = {
-        start_date: startDate,
-        end_date: endDate,
         is_manual: isManual,
     };
 
-    // Include display dates if provided (for showing correct dates in UI)
-    if (startDateDisplay && endDateDisplay) {
-        body.start_date_display = startDateDisplay;
-        body.end_date_display = endDateDisplay;
+    // Include display date if provided (for showing correct date in UI)
+    if (exportDateDisplay) {
+        body.export_date_display = exportDateDisplay;
     }
 
-    return http("/app/ulta-marketplace/export", {
+    return http("/app/inventory-data/export", {
         method: "POST",
         body: body,
     });
 }
 
 export async function getJobs() {
-    return http("/app/ulta-marketplace/jobs");
+    return http("/app/inventory-data/jobs");
 }
 
 export async function getJob(jobId) {
-    return http(`/app/ulta-marketplace/jobs/${jobId}`);
+    return http(`/app/inventory-data/jobs/${jobId}`);
 }
 
 export async function downloadJob(jobId) {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
     const token = localStorage.getItem("pfm_token");
 
-    return fetch(`${API_BASE_URL}/app/ulta-marketplace/jobs/${jobId}/download`, {
+    return fetch(`${API_BASE_URL}/app/inventory-data/jobs/${jobId}/download`, {
         method: "GET",
         headers: {
             Authorization: `Bearer ${token}`,
@@ -65,40 +62,41 @@ export async function downloadJob(jobId) {
 }
 
 export async function deleteJob(jobId) {
-    return http(`/app/ulta-marketplace/jobs/${jobId}`, {
+    return http(`/app/inventory-data/jobs/${jobId}`, {
         method: "DELETE",
     });
 }
 
 export async function getSchedulerStatus() {
-    return http("/app/ulta-marketplace/scheduler/status");
+    return http("/app/inventory-data/scheduler/status");
 }
 
 // Scheduled Export CRUD
 export async function createScheduledExport(data) {
-    return http("/app/ulta-marketplace/scheduled-exports", {
+    return http("/app/inventory-data/scheduled-exports", {
         method: "POST",
         body: data,
     });
 }
 
 export async function getScheduledExports() {
-    return http("/app/ulta-marketplace/scheduled-exports");
+    return http("/app/inventory-data/scheduled-exports");
 }
 
 export async function getScheduledExport(id) {
-    return http(`/app/ulta-marketplace/scheduled-exports/${id}`);
+    return http(`/app/inventory-data/scheduled-exports/${id}`);
 }
 
 export async function updateScheduledExport(id, data) {
-    return http(`/app/ulta-marketplace/scheduled-exports/${id}`, {
+    return http(`/app/inventory-data/scheduled-exports/${id}`, {
         method: "PUT",
         body: data,
     });
 }
 
 export async function deleteScheduledExport(id) {
-    return http(`/app/ulta-marketplace/scheduled-exports/${id}`, {
+    return http(`/app/inventory-data/scheduled-exports/${id}`, {
         method: "DELETE",
     });
 }
+

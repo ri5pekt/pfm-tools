@@ -7,6 +7,7 @@ import DashboardView from "../views/DashboardView.vue";
 import SalesTaxProcessorView from "../views/SalesTaxProcessorView.vue";
 import OrderComparisonView from "../views/OrderComparisonView.vue";
 import UltaMarketplaceView from "../views/UltaMarketplaceView.vue";
+import InventoryDataView from "../views/InventoryDataView.vue";
 
 const routes = [
     {
@@ -37,6 +38,11 @@ const routes = [
                 path: "ulta-marketplace",
                 name: "ulta-marketplace",
                 component: UltaMarketplaceView,
+            },
+            {
+                path: "inventory-data",
+                name: "inventory-data",
+                component: InventoryDataView,
             },
             {
                 path: "",

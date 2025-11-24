@@ -2,10 +2,8 @@
     <div class="service-container">
         <ConfirmDialog />
         <div class="service-page-header">
-            <h1 class="service-page-title">
-                <img src="@/assets/images/logo-ulta.svg" alt="Ulta" class="ulta-logo-header" />
-            </h1>
-            <p class="service-page-subtitle">Export Ulta marketplace orders to CSV and Google Sheets</p>
+            <h1 class="service-page-title">Inventory Data</h1>
+            <p class="service-page-subtitle">Export inventory data to CSV and Google Sheets</p>
         </div>
 
         <!-- Google Sheets Link -->
@@ -15,14 +13,14 @@
                     <img src="@/assets/images/logo-google-sheets.svg" alt="Google Sheets" class="google-sheets-icon" />
                     <div class="google-sheets-link-info">
                         <span class="google-sheets-link-label">View Live Google Sheets</span>
-                        <span class="google-sheets-link-desc">Access the real-time Ulta orders spreadsheet</span>
+                        <span class="google-sheets-link-desc">Access the real-time inventory data spreadsheet</span>
                     </div>
                     <Button
                         label="Open Google Sheets"
                         icon="pi pi-external-link"
                         severity="secondary"
                         outlined
-                        @click="openGoogleSheets('https://docs.google.com/spreadsheets/d/1nHH2C84XUmOLnL4zeQvsc2XgwcSoCCz2UY3qIQrFmQk/edit?usp=sharing')"
+                        @click="openGoogleSheets('https://docs.google.com/spreadsheets/d/1xwu59jE4z_yLlTmzlChKHZ_Xbyg-GqSihw_rhFXK6XU/edit?usp=sharing')"
                     />
                 </div>
             </template>
@@ -266,25 +264,16 @@
             </template>
             <template #content>
                 <form class="upload-section" @submit.prevent="handleManualExport">
-                    <div class="option-group">
-                        <label for="date-range" class="option-label"> Date Range </label>
-                        <DatePicker
-                            id="date-range"
-                            v-model="dateRange"
-                            selectionMode="range"
-                            :manualInput="false"
-                            iconDisplay="input"
-                            class="w-full"
-                            :maxDate="new Date()"
-                            placeholder="Select date range"
-                        />
+                    <div class="export-info">
+                        <i class="pi pi-info-circle"></i>
+                        <span>This export will use today's current data ({{ formatTodayDate() }})</span>
                     </div>
 
                     <Button
                         label="Run Export"
                         icon="pi pi-play"
                         class="process-button"
-                        :disabled="!dateRange || !Array.isArray(dateRange) || dateRange.length !== 2 || processing"
+                        :disabled="processing"
                         :loading="processing"
                         type="submit"
                     />
@@ -389,7 +378,6 @@ import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import Card from "primevue/card";
 import Button from "primevue/button";
-import DatePicker from "primevue/datepicker";
 import Tag from "primevue/tag";
 import ProgressBar from "primevue/progressbar";
 import ConfirmDialog from "primevue/confirmdialog";
@@ -408,12 +396,11 @@ import {
     getScheduledExports,
     updateScheduledExport,
     deleteScheduledExport,
-} from "../api/ultaMarketplaceApi.js";
+} from "../api/inventoryDataApi.js";
 
 const confirm = useConfirm();
 const toast = useToast();
 
-const dateRange = ref(null);
 const processing = ref(false);
 const jobs = ref([]);
 const schedulerStatus = ref(null);
@@ -465,24 +452,17 @@ const timezoneOptions = [
     "Australia/Sydney",
 ];
 
-// Times are set automatically in formatDateForAPI when sending to the API
-// No need to modify the date picker values
-
 const loadingJobs = ref(false);
 let refreshInterval = null;
 
 const formatDateTime = (dateString) => {
     if (!dateString) return "N/A";
-    // Parse the date string - it should be in ISO format with timezone
     const date = new Date(dateString);
 
-    // Check if date is valid
     if (isNaN(date.getTime())) {
         return "Invalid date";
     }
 
-    // Use the browser's local timezone for display
-    // This will automatically use the user's system timezone
     const options = {
         year: "numeric",
         month: "short",
@@ -491,20 +471,15 @@ const formatDateTime = (dateString) => {
         minute: "2-digit",
         second: "2-digit",
         timeZoneName: "short",
-        hour12: true, // Use 12-hour format with AM/PM
+        hour12: true,
     };
 
     return date.toLocaleString("en-US", options);
 };
 
-const openGoogleSheets = (url) => {
-    window.open(url, "_blank", "noopener,noreferrer");
-};
-
 const formatDate = (dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    // Use the browser's local timezone for display
     return date.toLocaleString("en-US", {
         year: "numeric",
         month: "short",
@@ -515,109 +490,25 @@ const formatDate = (dateString) => {
     });
 };
 
-const formatDateRange = (startDateStr, endDateStr) => {
-    if (!startDateStr || !endDateStr) return "-";
-
-    // If we have display dates stored, use those (they're the original selected dates)
-    // Otherwise, parse from the API date strings
-    let startDateOnly, endDateOnly;
-
-    if (typeof startDateStr === "object" && startDateStr.start_date_display) {
-        // Use stored display dates
-        startDateOnly = startDateStr.start_date_display;
-        endDateOnly = startDateStr.end_date_display;
-    } else {
-        // Parse from API date strings
-        startDateOnly = startDateStr.split("T")[0];
-        endDateOnly = endDateStr.split("T")[0];
-    }
-
-    // Parse as local date to avoid timezone shifts
-    const startParts = startDateOnly.split("-");
-    const endParts = endDateOnly.split("-");
-    const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
-    const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
-
-    const startFormatted = start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    const endFormatted = end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    return `${startFormatted} - ${endFormatted}`;
-};
-
-// Helper function to get Chicago timezone offset for a specific date
-// Returns offset in hours (CDT: -5, CST: -6)
-const getChicagoOffset = (year, month, day) => {
-    // Create a date at a known UTC time (noon) and check what time it is in Chicago
-    // This tells us the offset
-    const noonUTC = new Date(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T12:00:00Z`);
-
-    const chicagoFormatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/Chicago",
-        hour: "2-digit",
-        hour12: false,
+const formatTodayDate = () => {
+    const today = new Date();
+    return today.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
     });
-
-    const chicagoHour = parseInt(chicagoFormatter.format(noonUTC));
-
-    // At noon UTC (12:00):
-    // - If it's 7 AM Chicago, offset is -5 (CDT)
-    // - If it's 6 AM Chicago, offset is -6 (CST)
-    const offsetHours = chicagoHour - 12;
-
-    return offsetHours;
 };
 
-const formatDateForAPI = (date, isStartDate = true) => {
-    if (!date) return null;
-    const d = new Date(date);
-
-    // Match Ulta dashboard behavior: use timezone active at midnight of the date
-    // Extract date components (these are in user's local timezone, but we only need the date part)
-    const year = d.getFullYear();
-    const month = d.getMonth();
-    const day = d.getDate();
-
-    // Get Chicago timezone offset for this specific date
-    const offsetHours = getChicagoOffset(year, month, day);
-
-    // Create date string
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-
-    if (isStartDate) {
-        // Start date: midnight in Chicago time
-        // If Chicago is UTC-5, then Chicago 00:00:00 = UTC 05:00:00
-        // If Chicago is UTC-6, then Chicago 00:00:00 = UTC 06:00:00
-        // UTC time = Chicago time - offset (offset is negative, so we add hours)
-        const utcHour = Math.abs(offsetHours); // offset is -5 or -6, so abs gives 5 or 6
-        const utcStart = new Date(`${dateStr}T${String(utcHour).padStart(2, "0")}:00:00.000Z`);
-        return utcStart.toISOString();
-    } else {
-        // End date: 23:59:59.999 in Chicago time
-        // If Chicago is UTC-5, then Chicago 23:59:59.999 = UTC 04:59:59.999 (next day)
-        // If Chicago is UTC-6, then Chicago 23:59:59.999 = UTC 05:59:59.999 (next day)
-        // We need to add 1 day and subtract offset hours
-        const nextDay = new Date(year, month, day + 1);
-        const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, "0")}-${String(
-            nextDay.getDate()
-        ).padStart(2, "0")}`;
-        const utcHour = Math.abs(offsetHours) - 1; // 23:59 becomes 04:59 or 05:59 (next day)
-        const utcEnd = new Date(`${nextDayStr}T${String(utcHour).padStart(2, "0")}:59:59.999Z`);
-        return utcEnd.toISOString();
-    }
+const openGoogleSheets = (url) => {
+    window.open(url, "_blank", "noopener,noreferrer");
 };
 
 const getJobDisplayName = (job) => {
-    // Use stored display dates if available (original selected dates)
-    if (job.options?.start_date_display && job.options?.end_date_display) {
-        const startParts = job.options.start_date_display.split("-");
-        const endParts = job.options.end_date_display.split("-");
-        const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
-        const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
-        const startFormatted = start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        const endFormatted = end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        return `Export: ${startFormatted} - ${endFormatted}`;
-    } else if (job.options?.start_date && job.options?.end_date) {
-        // Fallback to API dates
-        return `Export: ${formatDateRange(job.options.start_date, job.options.end_date)}`;
+    if (job.options?.export_date_display) {
+        const dateParts = job.options.export_date_display.split("-");
+        const date = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+        const formatted = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        return `Export: ${formatted}`;
     }
     return `Export #${job.id}`;
 };
@@ -633,51 +524,22 @@ const getProgressText = (job) => {
 };
 
 const handleManualExport = async () => {
-    if (!dateRange.value || !Array.isArray(dateRange.value) || dateRange.value.length !== 2) {
-        toast.add({
-            severity: "warn",
-            summary: "Validation Error",
-            detail: "Please select a date range",
-            life: 3000,
-        });
-        return;
-    }
-
-    const startDateISO = formatDateForAPI(dateRange.value[0], true); // Start date: 00:00:00
-    const endDateISO = formatDateForAPI(dateRange.value[1], false); // End date: 23:59:59
-
-    if (!startDateISO || !endDateISO) {
-        toast.add({
-            severity: "error",
-            summary: "Error",
-            detail: "Invalid date format",
-            life: 3000,
-        });
-        return;
-    }
-
-    // Store original selected dates for display (as date strings YYYY-MM-DD)
-    const startDateDisplay = `${dateRange.value[0].getFullYear()}-${String(dateRange.value[0].getMonth() + 1).padStart(
-        2,
-        "0"
-    )}-${String(dateRange.value[0].getDate()).padStart(2, "0")}`;
-    const endDateDisplay = `${dateRange.value[1].getFullYear()}-${String(dateRange.value[1].getMonth() + 1).padStart(
-        2,
-        "0"
-    )}-${String(dateRange.value[1].getDate()).padStart(2, "0")}`;
+    // Get today's date in the format needed for the API
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const exportDateDisplay = `${year}-${month}-${day}`;
 
     processing.value = true;
     try {
-        const response = await createExport(startDateISO, endDateISO, true, startDateDisplay, endDateDisplay);
+        const response = await createExport(true, exportDateDisplay);
         toast.add({
             severity: "success",
             summary: "Export Started",
             detail: `Job ${response.job_id} has been queued`,
             life: 3000,
         });
-
-        // Reset form
-        dateRange.value = null;
 
         // Reload jobs list
         await loadJobs();
@@ -742,7 +604,7 @@ const handleDownload = async (jobId) => {
         link.href = url;
 
         // Use filename from response or default
-        const filename = response.filename || `ulta_export_${jobId}.csv`;
+        const filename = response.filename || `inventory_data_export_${jobId}.csv`;
 
         link.download = filename;
         document.body.appendChild(link);
@@ -1081,12 +943,9 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-}
-
-.ulta-logo-header {
-    height: 2.5rem;
-    width: auto;
-    object-fit: contain;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-color);
 }
 
 .upload-card,
@@ -1100,7 +959,6 @@ onUnmounted(() => {
 .card-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 0.75rem;
     padding: 1.5rem;
     border-bottom: 1px solid var(--surface-border);
@@ -1122,16 +980,21 @@ onUnmounted(() => {
     padding: 1.5rem;
 }
 
-.option-group {
+.export-info {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 0.5rem;
+    padding: 1rem;
+    background: var(--surface-50);
+    border-radius: 8px;
+    color: var(--text-color-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
 }
 
-.option-label {
-    font-weight: 600;
-    font-size: 0.95rem;
-    color: var(--text-color);
+.export-info i {
+    color: var(--primary-color);
+    font-size: 1.1rem;
 }
 
 .process-button {
@@ -1396,6 +1259,13 @@ onUnmounted(() => {
     gap: 0.5rem;
 }
 
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
 .scheduled-exports-list {
     padding: 1.5rem;
 }
@@ -1504,3 +1374,4 @@ onUnmounted(() => {
     margin-top: 0.25rem;
 }
 </style>
+

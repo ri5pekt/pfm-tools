@@ -67,6 +67,14 @@
                         <i class="pi pi-shopping-cart"></i>
                         <span>Ulta Marketplace</span>
                     </RouterLink>
+                    <RouterLink
+                        to="/app/inventory-data"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-box"></i>
+                        <span>Inventory Data</span>
+                    </RouterLink>
                 </nav>
             </aside>
 
@@ -205,7 +213,7 @@ function handleLogout() {
 .app-body {
     display: flex;
     flex: 1;
-    overflow: hidden;
+    min-height: 0;
 }
 
 .app-sidebar {
@@ -214,6 +222,10 @@ function handleLogout() {
     border-right: 1px solid var(--surface-border);
     padding: 1.5rem 0;
     overflow-y: auto;
+    position: sticky;
+    top: 80px;
+    align-self: flex-start;
+    max-height: calc(100vh - 80px);
 }
 
 .sidebar-nav {

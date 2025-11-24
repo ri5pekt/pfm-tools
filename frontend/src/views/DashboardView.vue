@@ -69,6 +69,25 @@
                     </div>
                 </template>
             </Card>
+
+            <!-- Inventory Data Service -->
+            <Card class="section-card" @click="$router.push({ name: 'inventory-data' })">
+                <template #content>
+                    <div class="section-card-content">
+                        <div class="section-icon-wrapper">
+                            <i class="pi pi-box section-icon"></i>
+                        </div>
+                        <h2 class="section-card-title">Inventory Data</h2>
+                        <p class="section-card-description">
+                            Export inventory data from multiple APIs to CSV and Google Sheets.
+                        </p>
+                        <div class="section-card-footer">
+                            <span class="section-card-link">Open Service</span>
+                            <i class="pi pi-arrow-right"></i>
+                        </div>
+                    </div>
+                </template>
+            </Card>
         </div>
         </div>
     </div>

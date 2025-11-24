@@ -1,8 +1,9 @@
 import os
-from datetime import datetime, timedelta, time as dt_time
 from typing import List
+from datetime import time as dt_time
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from . import schemas
@@ -10,61 +11,66 @@ from ...dependencies import get_db, get_current_user
 from ...core.config import get_settings
 from ...jobs.models import Job, ScheduledExport
 from ...jobs.queues import enqueue_job, cancel_job_by_id
-from .worker import run_ulta_export_job
-from .scheduler import get_scheduler_status
+from .worker import run_inventory_data_export_job
 from .scheduler_service import schedule_rq_job, unschedule_rq_job
-from datetime import time as dt_time
 
 router = APIRouter(
-    prefix="/api/app/ulta-marketplace",
-    tags=["ulta-marketplace"],
+    prefix="/api/app/inventory-data",
+    tags=["inventory-data"],
 )
 
-settings = get_settings()
 
-
-@router.post("/export", response_model=schemas.UltaExportResponse)
+@router.post("/export", response_model=schemas.InventoryDataExportResponse)
 def create_export(
-    request: schemas.UltaExportRequest,
+    request: schemas.InventoryDataExportRequest,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
-    Create a new Ulta Marketplace export job (manual run).
+    Create a new Inventory Data export job (manual run).
+    Always exports today's current data.
     """
-    # Validate date format (supports both with and without milliseconds)
-    def parse_date(date_str: str) -> datetime:
-        # Handle milliseconds if present (e.g., 2025-11-22T06:00:00.000Z)
-        if '.' in date_str and 'Z' in date_str:
-            # Remove milliseconds for parsing: 2025-11-22T06:00:00.000Z -> 2025-11-22T06:00:00Z
-            date_str = date_str.split('.')[0] + 'Z'
-        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+    # Get API credentials from settings (call get_settings() to ensure fresh values)
+    settings = get_settings()
+    zenventory_username = settings.zenventory_klb_username
+    zenventory_password = settings.zenventory_klb_password
+    zenventory_base_url = settings.zenventory_klb_base_url
+    shipbob_api_key = settings.shipbob_api_key
+    shipbob_base_url = settings.shipbob_base_url
 
-    try:
-        parse_date(request.start_date)
-        parse_date(request.end_date)
-    except (ValueError, AttributeError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid date format. Use ISO format: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.sssZ. Error: {str(e)}")
+    if not zenventory_username or not zenventory_password:
+        raise HTTPException(
+            status_code=500,
+            detail="Zenventory KLB credentials not configured. Please set ZENVENTORY_KLB_USERNAME and ZENVENTORY_KLB_PASSWORD environment variables."
+        )
 
-    # Get API key from environment or settings
-    ulta_api_key = os.getenv("ULTA_API_KEY") or settings.ulta_api_key
-    if not ulta_api_key:
-        raise HTTPException(status_code=500, detail="Ulta API key not configured")
+    if not shipbob_api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Shipbob API key not configured. Please set SHIPBOB_API_KEY environment variable."
+        )
+
+    # Get export date (today)
+    from datetime import datetime
+    export_date = datetime.now().strftime("%Y-%m-%d")
+    export_date_display = request.export_date_display or export_date
 
     # Create job record
     job = Job(
-        feature="ulta_marketplace",
+        feature="inventory_data",
         status="pending",
         input_filename="",  # No input file for API-based exports
         options={
-            "start_date": request.start_date,
-            "end_date": request.end_date,
             "is_manual": request.is_manual,
-            "ulta_api_key": ulta_api_key,
+            "export_date": export_date,
+            "export_date_display": export_date_display,
+            "zenventory_username": zenventory_username,
+            "zenventory_password": zenventory_password,
+            "zenventory_base_url": zenventory_base_url,
+            "shipbob_api_key": shipbob_api_key,
+            "shipbob_base_url": shipbob_base_url,
             "progress": 0,
             "status_message": "Queued for processing",
-            "start_date_display": request.start_date_display or request.start_date.split('T')[0],
-            "end_date_display": request.end_date_display or request.end_date.split('T')[0]
         }
     )
     db.add(job)
@@ -73,30 +79,30 @@ def create_export(
 
     # Enqueue the job
     enqueue_job(
-        run_ulta_export_job,
+        run_inventory_data_export_job,
         job.id,
         job_timeout=3600  # 1 hour timeout
     )
 
-    return schemas.UltaExportResponse(
+    return schemas.InventoryDataExportResponse(
         job_id=job.id,
         message="Export job created successfully"
     )
 
 
-@router.get("/jobs", response_model=List[schemas.UltaJobStatus])
+@router.get("/jobs", response_model=List[schemas.InventoryDataJobStatus])
 def list_jobs(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
-    List all Ulta Marketplace export jobs.
+    List all Inventory Data export jobs.
     """
-    jobs = db.query(Job).filter(Job.feature == "ulta_marketplace").order_by(Job.created_at.desc()).limit(100).all()
+    jobs = db.query(Job).filter(Job.feature == "inventory_data").order_by(Job.created_at.desc()).limit(100).all()
     return jobs
 
 
-@router.get("/jobs/{job_id}", response_model=schemas.UltaJobStatus)
+@router.get("/jobs/{job_id}", response_model=schemas.InventoryDataJobStatus)
 def get_job(
     job_id: int,
     db: Session = Depends(get_db),
@@ -105,7 +111,7 @@ def get_job(
     """
     Get details of a specific job.
     """
-    job = db.query(Job).filter(Job.id == job_id, Job.feature == "ulta_marketplace").first()
+    job = db.query(Job).filter(Job.id == job_id, Job.feature == "inventory_data").first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
@@ -118,9 +124,9 @@ def download_job(
     current_user=Depends(get_current_user),
 ):
     """
-    Download the CSV file for a completed job.
+    Download the ZIP file for a completed job.
     """
-    job = db.query(Job).filter(Job.id == job_id, Job.feature == "ulta_marketplace").first()
+    job = db.query(Job).filter(Job.id == job_id, Job.feature == "inventory_data").first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -130,10 +136,9 @@ def download_job(
     if not os.path.exists(job.output_filename):
         raise HTTPException(status_code=404, detail="Output file not found")
 
-    from fastapi.responses import FileResponse
     return FileResponse(
         job.output_filename,
-        media_type="text/csv",
+        media_type="application/zip",
         filename=os.path.basename(job.output_filename)
     )
 
@@ -145,9 +150,9 @@ def delete_job(
     current_user=Depends(get_current_user),
 ):
     """
-    Delete an Ulta Marketplace export job and its associated files.
+    Delete an Inventory Data export job and its associated files.
     """
-    job = db.query(Job).filter(Job.id == job_id, Job.feature == "ulta_marketplace").first()
+    job = db.query(Job).filter(Job.id == job_id, Job.feature == "inventory_data").first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -197,14 +202,14 @@ def get_scheduler_status_endpoint(
     try:
         # Get first enabled scheduled export
         scheduled_export = db.query(ScheduledExport).filter(
-            ScheduledExport.feature == "ulta_marketplace",
+            ScheduledExport.feature == "inventory_data",
             ScheduledExport.enabled == True
         ).first()
 
         if not scheduled_export or not scheduled_export.rq_job_id:
             # Get last scheduled job run
             last_job = db.query(Job).filter(
-                Job.feature == "ulta_marketplace",
+                Job.feature == "inventory_data",
                 Job.options['is_manual'].astext == 'false'
             ).order_by(Job.created_at.desc()).first()
 
@@ -241,7 +246,7 @@ def get_scheduler_status_endpoint(
 
         # Get last scheduled job run
         last_job = db.query(Job).filter(
-            Job.feature == "ulta_marketplace",
+            Job.feature == "inventory_data",
             Job.options['is_manual'].astext == 'false'
         ).order_by(Job.created_at.desc()).first()
 
@@ -311,7 +316,7 @@ def create_scheduled_export(
 
     # Create scheduled export
     scheduled_export = ScheduledExport(
-        feature="ulta_marketplace",
+        feature="inventory_data",
         name=request.name,
         period=request.period,
         frequency=frequency,
@@ -335,7 +340,7 @@ def create_scheduled_export(
         "feature": scheduled_export.feature,
         "name": scheduled_export.name,
         "period": scheduled_export.period,
-        "frequency": scheduled_export.frequency,
+        "frequency": scheduled_export.frequency if scheduled_export.frequency else 1,
         "time": scheduled_export.time.strftime("%H:%M") if scheduled_export.time else None,
         "day_of_week": scheduled_export.day_of_week,
         "day_of_month": scheduled_export.day_of_month,
@@ -357,7 +362,7 @@ def list_scheduled_exports(
     List all scheduled export configurations.
     """
     scheduled_exports = db.query(ScheduledExport).filter(
-        ScheduledExport.feature == "ulta_marketplace"
+        ScheduledExport.feature == "inventory_data"
     ).order_by(ScheduledExport.created_at.desc()).all()
 
     # Convert time objects to strings for response
@@ -395,7 +400,7 @@ def get_scheduled_export(
     """
     scheduled_export = db.query(ScheduledExport).filter(
         ScheduledExport.id == scheduled_export_id,
-        ScheduledExport.feature == "ulta_marketplace"
+        ScheduledExport.feature == "inventory_data"
     ).first()
 
     if not scheduled_export:
@@ -431,11 +436,15 @@ def update_scheduled_export(
     """
     scheduled_export = db.query(ScheduledExport).filter(
         ScheduledExport.id == scheduled_export_id,
-        ScheduledExport.feature == "ulta_marketplace"
+        ScheduledExport.feature == "inventory_data"
     ).first()
 
     if not scheduled_export:
         raise HTTPException(status_code=404, detail="Scheduled export not found")
+
+    # Track if we need to reschedule
+    was_enabled = scheduled_export.enabled
+    needs_reschedule = False
 
     # Validate frequency if provided
     if request.frequency is not None:
@@ -443,11 +452,6 @@ def update_scheduled_export(
             raise HTTPException(status_code=400, detail="frequency must be at least 1")
         scheduled_export.frequency = request.frequency
         needs_reschedule = True
-    else:
-        needs_reschedule = False
-
-    # Track if we need to reschedule
-    was_enabled = scheduled_export.enabled
 
     # Update fields
     if request.name is not None:
@@ -519,7 +523,7 @@ def delete_scheduled_export(
     """
     scheduled_export = db.query(ScheduledExport).filter(
         ScheduledExport.id == scheduled_export_id,
-        ScheduledExport.feature == "ulta_marketplace"
+        ScheduledExport.feature == "inventory_data"
     ).first()
 
     if not scheduled_export:

@@ -7,10 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.db import Base, engine
+from app.jobs.models import Job, ScheduledExport  # Ensure models are registered
 from app.auth.routes import router as auth_router
 from app.features.sales_tax_processor.routes import router as sales_tax_router
 from app.features.order_comparison.routes import router as order_comparison_router
 from app.features.ulta_marketplace.routes import router as ulta_marketplace_router
+from app.features.inventory_data.routes import router as inventory_data_router
 
 # Configure logging
 logging.basicConfig(
@@ -26,6 +28,31 @@ settings = get_settings()
 # Create tables (dev only)
 # =====================================================
 Base.metadata.create_all(bind=engine)
+
+# Add frequency column to scheduled_exports if it doesn't exist (migration)
+try:
+    from sqlalchemy import text, inspect
+    from app.core.db import SessionLocal
+
+    inspector = inspect(engine)
+    if 'scheduled_exports' in inspector.get_table_names():
+        columns = [col['name'] for col in inspector.get_columns('scheduled_exports')]
+        if 'frequency' not in columns:
+            logger = logging.getLogger(__name__)
+            logger.info("Adding 'frequency' column to scheduled_exports table...")
+            db = SessionLocal()
+            try:
+                db.execute(text("ALTER TABLE scheduled_exports ADD COLUMN frequency INTEGER DEFAULT 1 NOT NULL"))
+                db.commit()
+                logger.info("✓ Successfully added 'frequency' column")
+            except Exception as e:
+                logger.warning(f"Could not add frequency column (may already exist): {e}")
+                db.rollback()
+            finally:
+                db.close()
+except Exception as e:
+    # Non-critical, just log it
+    logging.getLogger(__name__).debug(f"Migration check skipped: {e}")
 
 # =====================================================
 # FastAPI app
@@ -84,6 +111,9 @@ app.include_router(order_comparison_router)
 
 # Ulta Marketplace → available at /api/app/ulta-marketplace/* (prefix already defined in router)
 app.include_router(ulta_marketplace_router)
+
+# Inventory Data → available at /api/app/inventory-data/* (prefix already defined in router)
+app.include_router(inventory_data_router)
 
 # Other modules later:
 # app.include_router(taxes_router, prefix="/api/taxes")

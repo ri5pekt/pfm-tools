@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     # Ulta Marketplace API config (optional)
     ulta_api_key: Optional[str] = None
 
+    # Zenventory API config (optional)
+    zenventory_klb_username: Optional[str] = None
+    zenventory_klb_password: Optional[str] = None
+    zenventory_klb_base_url: Optional[str] = "https://app.zenventory.com/rest/inventory"
+
+    # Shipbob API config (optional)
+    shipbob_api_key: Optional[str] = None
+    shipbob_base_url: Optional[str] = "https://api.shipbob.com/2025-07"
+
     # Google Sheets API config (optional)
     # OAuth 2.0 credentials (for organization projects that don't allow service account keys)
     google_sheets_oauth_credentials_path: Optional[str] = None  # Path to OAuth client credentials JSON file
@@ -65,6 +74,8 @@ class Settings(BaseSettings):
     # Alternative naming with ULTA_ prefix (for backward compatibility)
     ulta_google_sheets_spreadsheet_id: Optional[str] = None  # Alternative: ULTA_GOOGLE_SHEETS_SPREADSHEET_ID
     ulta_google_sheets_sheet_name: Optional[str] = None  # Alternative: ULTA_GOOGLE_SHEETS_SHEET_NAME
+    # Inventory Data specific spreadsheet ID
+    inventory_google_sheets_spreadsheet_id: Optional[str] = None  # Inventory Data Google Sheets spreadsheet ID
 
     # Where to read env vars from
     model_config = SettingsConfigDict(
