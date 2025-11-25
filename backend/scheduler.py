@@ -30,12 +30,12 @@ def main():
         conn = get_redis_connection()
         scheduler = Scheduler(connection=conn)
         
+        # Cancel old hardcoded job by ID directly
         try:
-            old_job = scheduler.get_job("ulta_daily_export")
-            if old_job:
-                scheduler.cancel("ulta_daily_export")
-                logger.info("Cleared old hardcoded scheduled job 'ulta_daily_export'")
+            scheduler.cancel("ulta_daily_export")
+            logger.info("Cleared old hardcoded scheduled job 'ulta_daily_export'")
         except Exception as e:
+            # Job may not exist, which is fine
             logger.debug(f"Could not clear old job (may not exist): {e}")
 
         # Load all enabled scheduled exports
