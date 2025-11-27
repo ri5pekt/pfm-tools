@@ -6,7 +6,7 @@ from ...core.config import get_settings
 from ...core.db import SessionLocal
 from ...jobs.models import Job
 from ...features.sales_tax_processor.woocommerce_client import WooCommerceClient
-from .service import parse_complyt_csv, fetch_woocommerce_orders, generate_comparison_report, generate_comparison_report_pdf
+from .service import parse_complyt_csv, fetch_woocommerce_orders, generate_comparison_report, create_comparison_report_zip
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -51,6 +51,9 @@ def run_comparison_job(job_id: int):
         order_id_header = options.get("order_id_header", "externalId")
         date_from = options.get("date_from")
         date_to = options.get("date_to")
+        usa_only = options.get("usa_only", True)  # Default to True
+        exclude_states = options.get("exclude_states", [])  # Default to empty list
+        exclude_complyt_states = options.get("exclude_complyt_states", [])  # Default to empty list
 
 
         if not date_from or not date_to:
@@ -61,22 +64,33 @@ def run_comparison_job(job_id: int):
 
         # Update progress
         new_options = dict(options)
-        new_options['progress'] = 10
+        new_options['progress'] = 5
         new_options['status_message'] = 'Parsing Complyt CSV file...'
         job.options = new_options
         db.commit()
         db.refresh(job)
 
-        # Parse Complyt CSV (with date filtering)
+        # Parse Complyt CSV (with country and state filtering)
         logger.info(f"Parsing Complyt CSV file: {input_path}")
-        complyt_data = parse_complyt_csv(input_path, order_id_header, date_from=date_from, date_to=date_to)
+        if usa_only:
+            logger.info(f"Filtering Complyt CSV: USA orders only")
+        if exclude_complyt_states:
+            logger.info(f"Excluding Complyt CSV orders from states: {', '.join(exclude_complyt_states)}")
+        complyt_data = parse_complyt_csv(
+            input_path,
+            order_id_header,
+            date_from=date_from,
+            date_to=date_to,
+            exclude_states=exclude_complyt_states,
+            usa_only=usa_only
+        )
         logger.info(f"Found {len(complyt_data['invoices'])} invoices, "
                    f"{len(complyt_data['taxable_refunds'])} taxable refunds, "
-                   f"{len(complyt_data['refunds'])} refunds in Complyt CSV (filtered by date range {date_from} to {date_to})")
+                   f"{len(complyt_data['refunds'])} refunds in Complyt CSV")
 
         # Update progress
         new_options = dict(options)
-        new_options['progress'] = 30
+        new_options['progress'] = 5
         new_options['status_message'] = 'Fetching WooCommerce orders...'
         job.options = new_options
         db.commit()
@@ -94,9 +108,21 @@ def run_comparison_job(job_id: int):
 
         # Fetch WooCommerce orders
         logger.info(f"Fetching WooCommerce orders for date range: {date_from} to {date_to}")
+        if usa_only:
+            logger.info(f"Filtering: USA orders only")
+        if exclude_states:
+            logger.info(f"Excluding states: {', '.join(exclude_states)}")
 
         try:
-            woo_data = fetch_woocommerce_orders(date_from, date_to, woo_client, job_id=job.id, db=db)
+            woo_data = fetch_woocommerce_orders(
+                date_from,
+                date_to,
+                woo_client,
+                job_id=job.id,
+                db=db,
+                usa_only=usa_only,
+                exclude_states=exclude_states
+            )
             logger.info(f"=== WooCommerce fetch completed ===")
             logger.info(f"Found {len(woo_data['orders'])} orders and {len(woo_data['refunds'])} refunds in WooCommerce")
         except Exception as e:
@@ -105,31 +131,31 @@ def run_comparison_job(job_id: int):
 
         # Update progress
         new_options = dict(options)
-        new_options['progress'] = 70
+        new_options['progress'] = 98
         new_options['status_message'] = 'Generating comparison report...'
         job.options = new_options
         db.commit()
         db.refresh(job)
 
-        # Generate comparison report (PDF)
-        logger.info("Generating comparison report (PDF)")
+        # Generate comparison report (CSV files in ZIP archive)
+        logger.info("Generating comparison report (CSV files in ZIP archive)")
         output_path = os.path.join(
             settings.processed_dir,
-            f"job_{job.id}_comparison_report.pdf",
+            f"job_{job.id}_comparison_report.zip",
         )
 
         try:
-            generate_comparison_report_pdf(
+            create_comparison_report_zip(
                 complyt_data,
                 woo_data,
                 output_path,
                 date_from=date_from,
                 date_to=date_to
             )
-            logger.info(f"PDF report saved to: {output_path}")
+            logger.info(f"ZIP report saved to: {output_path}")
         except Exception as e:
-            logger.error(f"Error generating PDF report: {str(e)}", exc_info=True)
-            # Fallback to text report if PDF generation fails
+            logger.error(f"Error generating ZIP report: {str(e)}", exc_info=True)
+            # Fallback to text report if ZIP generation fails
             logger.warning("Falling back to text report format")
             output_path = os.path.join(
                 settings.processed_dir,

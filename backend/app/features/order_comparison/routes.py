@@ -30,6 +30,9 @@ async def upload_csv(
     order_id_header: str = Form(...),
     date_from: str = Form(...),
     date_to: str = Form(...),
+    usa_only: str = Form("true"),
+    exclude_states: str = Form(""),
+    exclude_complyt_states: str = Form(""),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -77,10 +80,20 @@ async def upload_csv(
             os.remove(dest_path)
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
+    # Parse boolean and states
+    usa_only_bool = usa_only.lower() == "true"
+    # WooCommerce uses state codes (uppercase)
+    exclude_states_list = [s.strip().upper() for s in exclude_states.split(",") if s.strip()] if exclude_states else []
+    # Complyt CSV uses full state names (preserve original case)
+    exclude_complyt_states_list = [s.strip() for s in exclude_complyt_states.split(",") if s.strip()] if exclude_complyt_states else []
+
     options = {
         "order_id_header": order_id_header,
         "date_from": date_from,
         "date_to": date_to,
+        "usa_only": usa_only_bool,
+        "exclude_states": exclude_states_list,
+        "exclude_complyt_states": exclude_complyt_states_list,
         "original_filename": file.filename,  # Store original filename for display
     }
 
@@ -144,7 +157,13 @@ def download_job(
         raise HTTPException(status_code=404, detail="Report file missing")
 
     # Determine media type and filename based on file extension
-    if job.output_filename.endswith('.pdf'):
+    if job.output_filename.endswith('.zip'):
+        media_type = "application/zip"
+        # Ensure filename has .zip extension for download
+        filename = os.path.basename(job.output_filename)
+        if not filename.endswith('.zip'):
+            filename = filename.rsplit('.', 1)[0] + '.zip'
+    elif job.output_filename.endswith('.pdf'):
         media_type = "application/pdf"
         # Ensure filename has .pdf extension for download
         filename = os.path.basename(job.output_filename)

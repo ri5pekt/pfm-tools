@@ -1,7 +1,7 @@
 // frontend/src/api/orderComparisonApi.js
 import { http } from "./http";
 
-export function uploadComparison(file, orderIdHeader, dateFrom, dateTo) {
+export function uploadComparison(file, orderIdHeader, dateFrom, dateTo, usaOnly = true, excludeStates = [], excludeComplytStates = []) {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("order_id_header", orderIdHeader);
@@ -24,6 +24,19 @@ export function uploadComparison(file, orderIdHeader, dateFrom, dateTo) {
 
     formData.append("date_from", formatDateLocal(dateFrom));
     formData.append("date_to", formatDateLocal(dateTo));
+    formData.append("usa_only", usaOnly ? "true" : "false");
+
+    // Convert excludeStates array to comma-separated string
+    if (excludeStates && excludeStates.length > 0) {
+        const statesString = Array.isArray(excludeStates) ? excludeStates.join(",") : excludeStates;
+        formData.append("exclude_states", statesString);
+    }
+
+    // Convert excludeComplytStates array to comma-separated string
+    if (excludeComplytStates && excludeComplytStates.length > 0) {
+        const statesString = Array.isArray(excludeComplytStates) ? excludeComplytStates.join(",") : excludeComplytStates;
+        formData.append("exclude_complyt_states", statesString);
+    }
 
     return http("/app/order-comparison/upload", {
         method: "POST",

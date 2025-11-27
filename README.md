@@ -1,14 +1,24 @@
 # PFM Tools
 
-**Version:** 1.2.0
+**Version:** 1.3.0
 
 A modern web application for processing sales tax data, managing inventory, and exporting marketplace data with integration to WooCommerce, Braintree, AfterShip, Ulta Marketplace, Zenventory, ShipBob, and Google Sheets.
+
+## 📝 Changelog
+
+### Version 1.3.0 (2025-11-27)
+- **Order Comparison Tool Improvements**:
+  - Fixed timezone handling: Changed from America/New_York to UTC to match Complyt CSV timezone
+  - Added country filtering for Complyt CSV: Filters by `shippingAddress.country == 'USA'` when "USA orders only" is enabled
+  - Improved order ID normalization for better matching between Complyt and WooCommerce
+  - Enhanced progress bar accuracy: Progress now reflects actual time distribution (WooCommerce fetching: 5-95%, CSV parsing: 5%, processing: 95-98%)
+  - Added detailed logging for debugging order mismatches
 
 ## 🚀 Features
 
 ### Tools
 - **Sales Tax Processing**: Upload and process CSV files for sales tax calculations
-- **Order Comparison Tool**: Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed PDF reports
+- **Order Comparison Tool**: Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed CSV reports. Features UTC timezone matching, country/state filtering, and accurate progress tracking.
 - **Inventory Data Management**: Aggregate inventory data from Zenventory and ShipBob APIs, export to CSV/ZIP and Google Sheets
 - **Ulta Marketplace Exports**: Export Ulta Marketplace order data with date range selection, export to CSV and Google Sheets
 
@@ -214,7 +224,7 @@ For detailed production deployment instructions, see [README_PRODUCTION.md](READ
    docker compose -f docker-compose.prod.yml build
    docker compose -f docker-compose.prod.yml up -d --scale worker=3
    ```
-   
+
    **Note:** The scheduler service is required for scheduled exports to work. It starts automatically with the above command.
 
 3. **Set up Nginx reverse proxy** (see production guide)

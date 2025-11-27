@@ -27,6 +27,7 @@ data/uploads/
 order_*.json
 test_*.py
 test_*.js
+check_*.py
 ulta-response.json
 
 # Google OAuth credentials (keep secure, don't commit)
@@ -35,3 +36,6 @@ backend/credentials/
 backend/google_sheets_token.pickle
 backend/*credentials*.json
 backend/*.pickle
+
+# WooCommerce plugin mirror (local development copy)
+pfm-tools-utils-woocommerce-plugin-mirror/

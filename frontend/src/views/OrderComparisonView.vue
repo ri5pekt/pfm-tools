@@ -75,6 +75,51 @@
                                 placeholder="Select date range"
                             />
                         </div>
+
+                        <div class="option-group">
+                            <div class="checkbox-group">
+                                <Checkbox
+                                    id="usa-only"
+                                    v-model="usaOnly"
+                                    :binary="true"
+                                />
+                                <label for="usa-only" class="checkbox-label">
+                                    USA orders only
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="exclude-states" class="option-label">
+                                Exclude Woocommerce orders from Nomad States
+                            </label>
+                            <Chips
+                                id="exclude-states"
+                                v-model="excludeStates"
+                                placeholder="Enter state codes (e.g., AK, DE, MT)"
+                                class="w-full"
+                                separator=","
+                            />
+                            <small class="option-hint">
+                                States with no sales tax: AK, DE, MT, NH, OR (default)
+                            </small>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="exclude-complyt-states" class="option-label">
+                                Exclude Complyt CSV orders from Nomad States
+                            </label>
+                            <Chips
+                                id="exclude-complyt-states"
+                                v-model="excludeComplytStates"
+                                placeholder="Enter full state names (e.g., Montana, Delaware)"
+                                class="w-full"
+                                separator=","
+                            />
+                            <small class="option-hint">
+                                States with no sales tax: Alaska, Delaware, Montana, New Hampshire, Oregon (default)
+                            </small>
+                        </div>
                     </div>
 
                     <Button
@@ -190,6 +235,8 @@ import InputText from "primevue/inputtext";
 import Calendar from "primevue/calendar";
 import ProgressBar from "primevue/progressbar";
 import ConfirmDialog from "primevue/confirmdialog";
+import Checkbox from "primevue/checkbox";
+import Chips from "primevue/chips";
 import { uploadComparison, listJobs, downloadJob, deleteJob } from "../api/orderComparisonApi";
 
 const toast = useToast();
@@ -198,6 +245,9 @@ const fileInput = ref(null);
 const selectedFile = ref(null);
 const orderIdHeader = ref("externalId");
 const dateRange = ref(null);
+const usaOnly = ref(true); // Default: checked
+const excludeStates = ref(["AK", "DE", "MT", "NH", "OR"]); // Default: States with no sales tax (WooCommerce - uses codes)
+const excludeComplytStates = ref(["Alaska", "Delaware", "Montana", "New Hampshire", "Oregon"]); // Default: States with no sales tax (Complyt CSV - uses full names)
 const processing = ref(false);
 const jobs = ref([]);
 let refreshInterval = null;
@@ -259,7 +309,10 @@ async function handleUpload() {
             selectedFile.value,
             orderIdHeader.value,
             dateFrom,
-            dateTo
+            dateTo,
+            usaOnly.value,
+            excludeStates.value,
+            excludeComplytStates.value
         );
         toast.add({
             severity: "success",
@@ -270,6 +323,9 @@ async function handleUpload() {
         selectedFile.value = null;
         orderIdHeader.value = "externalId";
         dateRange.value = null;
+        usaOnly.value = true;
+        excludeStates.value = ["AK", "DE", "MT", "NH", "OR"];
+        excludeComplytStates.value = ["Alaska", "Delaware", "Montana", "New Hampshire", "Oregon"];
         if (fileInput.value) {
             fileInput.value.value = "";
         }
@@ -443,7 +499,6 @@ onUnmounted(() => {
     margin-bottom: 2rem;
     border-radius: 12px;
     border: 1px solid var(--surface-border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .card-header {
@@ -568,6 +623,27 @@ onUnmounted(() => {
     font-weight: 600;
     font-size: 0.95rem;
     color: var(--text-color);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.checkbox-label {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--text-color);
+    cursor: pointer;
+    user-select: none;
+}
+
+.option-hint {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
 }
 
 .process-button {

@@ -115,6 +115,44 @@ def schedule_rq_job(db: Session, scheduled_export: ScheduledExport):
             except Exception as e:
                 logger.debug(f"Could not cancel existing job (may not exist): {e}")
 
+        # Also check for and cancel any jobs with the same ID pattern (in case of duplicates)
+        # This prevents duplicate scheduling if the scheduler restarts
+        try:
+            all_jobs = scheduler.get_jobs()
+            rq_job_id = f"ulta_marketplace_scheduled_export_{scheduled_export.id}"
+
+            # Cancel any jobs with the same ID (duplicates)
+            for job in all_jobs:
+                if job.id == rq_job_id:
+                    if scheduled_export.rq_job_id and job.id == scheduled_export.rq_job_id:
+                        # This is the current job, keep it
+                        continue
+                    logger.warning(f"Found duplicate scheduled job {job.id}, cancelling it")
+                    try:
+                        scheduler.cancel(job.id)
+                        # Also clean up Redis keys
+                        conn.delete(f"rq:job:{job.id}")
+                        conn.delete(f"rq:results:{job.id}")
+                        conn.zrem('rq:scheduler:scheduled_jobs', job.id)
+                    except Exception as cancel_error:
+                        logger.debug(f"Could not cancel duplicate job {job.id}: {cancel_error}")
+
+            # Also cancel any old hardcoded jobs that might exist
+            old_job_ids = ["ulta_daily_export"]
+            for old_job_id in old_job_ids:
+                for job in all_jobs:
+                    if job.id == old_job_id:
+                        logger.warning(f"Found old hardcoded job {old_job_id}, cancelling it")
+                        try:
+                            scheduler.cancel(old_job_id)
+                            conn.delete(f"rq:job:{old_job_id}")
+                            conn.delete(f"rq:results:{old_job_id}")
+                            conn.zrem('rq:scheduler:scheduled_jobs', old_job_id)
+                        except Exception as cancel_error:
+                            logger.debug(f"Could not cancel old job {old_job_id}: {cancel_error}")
+        except Exception as e:
+            logger.debug(f"Could not check for duplicate jobs: {e}")
+
         # Get frequency (default to 1 if not set)
         frequency = scheduled_export.frequency if scheduled_export.frequency else 1
         if frequency < 1:

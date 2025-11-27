@@ -18,7 +18,16 @@
     box-sizing: border-box;
 }
 
+html {
+    height: 100%;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+}
+
 body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -26,9 +35,8 @@ body {
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
-/* Smooth scrolling */
-html {
-    scroll-behavior: smooth;
+#app {
+    height: 100%;
 }
 
 /* Better focus styles */
@@ -37,23 +45,32 @@ html {
     outline-offset: 2px;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - always visible */
 ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
+    -webkit-appearance: none;
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--surface-ground);
+    background: #f1f1f1;
+    border-left: 1px solid #e0e0e0;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--surface-border);
-    border-radius: 5px;
+    background: #888;
+    border-radius: 6px;
+    border: 2px solid #f1f1f1;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-color-secondary);
+    background: #555;
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #888 #f1f1f1;
 }
 
 /* PrimeVue ConfirmDialog styling */
@@ -93,5 +110,15 @@ html {
     font-size: 1rem;
     color: var(--text-color-secondary);
     margin: 0;
+}
+
+/* Global card styling with noticeable shadow */
+.p-card {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+    transition: box-shadow 0.2s ease;
+}
+
+.p-card:hover {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15) !important;
 }
 </style>

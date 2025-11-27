@@ -409,7 +409,6 @@ onUnmounted(() => {
     margin-bottom: 2rem;
     border-radius: 12px;
     border: 1px solid var(--surface-border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .card-header {

@@ -220,12 +220,13 @@ function handleLogout() {
     width: 260px;
     background: var(--surface-0);
     border-right: 1px solid var(--surface-border);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
     padding: 1.5rem 0;
     overflow-y: auto;
     position: sticky;
     top: 80px;
+    height: calc(100vh - 80px);
     align-self: flex-start;
-    max-height: calc(100vh - 80px);
 }
 
 .sidebar-nav {
@@ -273,6 +274,26 @@ function handleLogout() {
     flex: 1;
     overflow-y: auto;
     background: var(--surface-ground);
+}
+
+/* Custom scrollbar for main content - always visible */
+.app-main::-webkit-scrollbar {
+    width: 12px;
+}
+
+.app-main::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-left: 1px solid #e0e0e0;
+}
+
+.app-main::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 6px;
+    border: 2px solid #f1f1f1;
+}
+
+.app-main::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 /* Custom scrollbar for sidebar */

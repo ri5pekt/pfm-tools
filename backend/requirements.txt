@@ -29,4 +29,6 @@ gspread
 google-auth
 google-auth-oauthlib
 
+pytz
+
 
