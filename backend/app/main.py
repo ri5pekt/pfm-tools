@@ -13,6 +13,11 @@ from app.features.sales_tax_processor.routes import router as sales_tax_router
 from app.features.order_comparison.routes import router as order_comparison_router
 from app.features.ulta_marketplace.routes import router as ulta_marketplace_router
 from app.features.inventory_data.routes import router as inventory_data_router
+try:
+    from app.features.daily_orders_data.routes import router as daily_orders_data_router
+except Exception as e:
+    logging.error(f"Failed to import daily_orders_data router: {e}", exc_info=True)
+    daily_orders_data_router = None
 
 # Configure logging
 logging.basicConfig(
@@ -114,6 +119,12 @@ app.include_router(ulta_marketplace_router)
 
 # Inventory Data → available at /api/app/inventory-data/* (prefix already defined in router)
 app.include_router(inventory_data_router)
+
+# Daily Orders Data → available at /api/app/daily-orders-data/* (prefix already defined in router)
+if daily_orders_data_router:
+    app.include_router(daily_orders_data_router)
+else:
+    logging.error("Daily Orders Data router is None - not including routes")
 
 # Other modules later:
 # app.include_router(taxes_router, prefix="/api/taxes")
