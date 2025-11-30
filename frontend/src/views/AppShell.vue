@@ -75,6 +75,14 @@
                         <i class="pi pi-box"></i>
                         <span>Inventory Data</span>
                     </RouterLink>
+                    <RouterLink
+                        to="/app/daily-orders-data"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-calendar"></i>
+                        <span>Daily Orders Data</span>
+                    </RouterLink>
                 </nav>
             </aside>
 

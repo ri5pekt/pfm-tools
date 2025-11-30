@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     ulta_google_sheets_sheet_name: Optional[str] = None  # Alternative: ULTA_GOOGLE_SHEETS_SHEET_NAME
     # Inventory Data specific spreadsheet ID
     inventory_google_sheets_spreadsheet_id: Optional[str] = None  # Inventory Data Google Sheets spreadsheet ID
+    # Daily Orders Data specific spreadsheet ID
+    daily_orders_google_sheets_spreadsheet_id: Optional[str] = None  # Daily Orders Data Google Sheets spreadsheet ID
 
     # Where to read env vars from
     model_config = SettingsConfigDict(

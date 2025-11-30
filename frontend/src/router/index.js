@@ -8,6 +8,7 @@ import SalesTaxProcessorView from "../views/SalesTaxProcessorView.vue";
 import OrderComparisonView from "../views/OrderComparisonView.vue";
 import UltaMarketplaceView from "../views/UltaMarketplaceView.vue";
 import InventoryDataView from "../views/InventoryDataView.vue";
+import DailyOrdersDataView from "../views/DailyOrdersDataView.vue";
 
 const routes = [
     {
@@ -43,6 +44,11 @@ const routes = [
                 path: "inventory-data",
                 name: "inventory-data",
                 component: InventoryDataView,
+            },
+            {
+                path: "daily-orders-data",
+                name: "daily-orders-data",
+                component: DailyOrdersDataView,
             },
             {
                 path: "",
