@@ -115,8 +115,8 @@ def save_ulta_orders_to_csv(
     logger.info(f"Processing {len(orders)} orders to CSV (total_count: {total_count})")
 
     if not orders:
-        # Create empty CSV with headers (no product columns if no orders)
-        # Use 'utf-8-sig' encoding to add BOM for Excel compatibility
+            # Create empty CSV with headers (no product columns if no orders)
+            # Use 'utf-8-sig' encoding to add BOM for Excel compatibility
         with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -125,7 +125,8 @@ def save_ulta_orders_to_csv(
                 'Total Ulta Orders',
                 'Total Ulta Commission',
                 'Collected Sales Tax',
-                'Total Ulta Units'
+                'Total Ulta Units',
+                'Total Daily Refunds'
             ])
             writer.writerow(['No orders found for the selected date range'])
         logger.info(f"Created empty CSV file: {output_path}")
@@ -245,6 +246,7 @@ def save_ulta_orders_to_csv(
                 'units': 0,
                 'commission': 0.0,
                 'sales_tax': 0.0,
+                'refunds': 0.0,  # Total refund amount in dollars
                 'products': {}  # Dictionary to track quantity per product
             }
 
@@ -322,6 +324,24 @@ def save_ulta_orders_to_csv(
                     except (ValueError, TypeError) as e:
                         logger.warning(f"Could not parse tax amount '{tax_amount}': {e}")
 
+            # Process refunds - group by order date (not refund date)
+            # This ensures refunds appear on the same row as the order for daily exports
+            refunds = line.get('refunds', [])
+            if not isinstance(refunds, list):
+                refunds = []
+
+            for refund in refunds:
+                if not isinstance(refund, dict):
+                    continue
+
+                # Add refund amount to the order date's totals (not refund date)
+                # Use the same date_key as the order so refunds appear on the same row
+                refund_amount = refund.get('amount', 0)
+                try:
+                    daily_totals[date_key]['refunds'] += float(refund_amount)
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Could not parse refund amount '{refund_amount}': {e}")
+
     # Sort by date
     sorted_dates = sorted(daily_totals.keys())
 
@@ -340,7 +360,8 @@ def save_ulta_orders_to_csv(
             'Total Ulta Orders',
             'Total Ulta Commission',
             'Collected Sales Tax',
-            'Total Ulta Units'
+            'Total Ulta Units',
+            'Total Daily Refunds'
         ]
         # Add product columns
         headers.extend(sorted_products)
@@ -358,7 +379,8 @@ def save_ulta_orders_to_csv(
                 totals['orders_count'],
                 round(totals['commission'], 2),
                 round(totals['sales_tax'], 2),
-                totals['units']
+                totals['units'],
+                round(totals.get('refunds', 0.0), 2)
             ]
             # Add product quantities (0 if product not sold on this date)
             for product in sorted_products:
@@ -471,13 +493,50 @@ def export_to_google_sheets(
             logger.error(f"Failed to open spreadsheet {spreadsheet_id}: {str(e)}", exc_info=True)
             return False
 
+        # Generate month+year sheet name from date range
+        # Use start_date to determine the month/year, or first order date if start_date not provided
+        month_year_sheet_name = None
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                chicago_tz = ZoneInfo("America/Chicago")
+                start_chicago = start_dt.astimezone(chicago_tz)
+                month_year_sheet_name = start_chicago.strftime('%B %Y')  # e.g., "November 2025"
+            except Exception as e:
+                logger.warning(f"Could not parse start_date for sheet name: {e}, using provided sheet_name")
+
+        # If we couldn't generate from start_date, try to use first order date
+        if not month_year_sheet_name:
+            orders = orders_data.get('orders', [])
+            if orders:
+                try:
+                    first_order_date = orders[0].get('created_date')
+                    if first_order_date:
+                        if '.' in first_order_date and 'Z' in first_order_date:
+                            first_order_date_clean = first_order_date.split('.')[0] + 'Z'
+                        else:
+                            first_order_date_clean = first_order_date
+                        first_dt = datetime.fromisoformat(first_order_date_clean.replace('Z', '+00:00'))
+                        chicago_tz = ZoneInfo("America/Chicago")
+                        first_chicago = first_dt.astimezone(chicago_tz)
+                        month_year_sheet_name = first_chicago.strftime('%B %Y')
+                except Exception as e:
+                    logger.warning(f"Could not parse first order date for sheet name: {e}")
+
+        # Fall back to provided sheet_name if we couldn't generate month+year
+        if not month_year_sheet_name:
+            month_year_sheet_name = sheet_name
+
+        logger.info(f"Using sheet name: {month_year_sheet_name}")
+
         # Get or create the sheet (case-insensitive matching)
         # Initialize variables
         worksheet = None
         has_headers = False
+        sheet_was_created = False
 
         try:
-            logger.info(f"Looking for sheet: {sheet_name}")
+            logger.info(f"Looking for sheet: {month_year_sheet_name}")
 
             # List all worksheets to find a case-insensitive match
             all_worksheets = spreadsheet.worksheets()
@@ -485,41 +544,82 @@ def export_to_google_sheets(
 
             # Try exact match first
             try:
-                worksheet = spreadsheet.worksheet(sheet_name)
-                logger.info(f"Found existing sheet (exact match): {sheet_name}")
+                worksheet = spreadsheet.worksheet(month_year_sheet_name)
+                logger.info(f"Found existing sheet (exact match): {month_year_sheet_name}")
             except gspread.exceptions.WorksheetNotFound:
                 # Try case-insensitive match
                 for ws in all_worksheets:
-                    if ws.title.lower() == sheet_name.lower():
+                    if ws.title.lower() == month_year_sheet_name.lower():
                         worksheet = ws
-                        logger.info(f"Found existing sheet (case-insensitive match): '{ws.title}' (requested: '{sheet_name}')")
+                        logger.info(f"Found existing sheet (case-insensitive match): '{ws.title}' (requested: '{month_year_sheet_name}')")
                         break
 
                 if not worksheet:
                     # Sheet not found, create new one
-                    logger.info(f"Sheet '{sheet_name}' not found, creating new sheet...")
-                    worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=50)
-                    logger.info(f"Created new sheet: {sheet_name}")
+                    logger.info(f"Sheet '{month_year_sheet_name}' not found, creating new sheet...")
+                    worksheet = spreadsheet.add_worksheet(title=month_year_sheet_name, rows=1000, cols=50)
+                    sheet_was_created = True
+                    logger.info(f"Created new sheet: {month_year_sheet_name}")
+
+                    # Copy header from first tab (Main or first worksheet)
+                    try:
+                        first_tab = None
+                        # Try to find "Main" tab first
+                        for ws in all_worksheets:
+                            if ws.title.lower() == 'main':
+                                first_tab = ws
+                                logger.info(f"Found 'Main' tab, copying header from it")
+                                break
+
+                        # If no "Main" tab, use the first worksheet
+                        if not first_tab and all_worksheets:
+                            first_tab = all_worksheets[0]
+                            logger.info(f"No 'Main' tab found, copying header from first tab: '{first_tab.title}'")
+
+                        if first_tab:
+                            first_tab_data = first_tab.get_all_values()
+                            if first_tab_data and len(first_tab_data) > 0:
+                                header_row = first_tab_data[0]
+                                worksheet.append_row(header_row)
+                                logger.info(f"Copied header from '{first_tab.title}' to new sheet '{month_year_sheet_name}'")
+                                has_headers = True
+                            else:
+                                logger.warning(f"First tab '{first_tab.title}' has no header row to copy")
+                        else:
+                            logger.warning("No tabs found to copy header from")
+                    except Exception as e:
+                        logger.warning(f"Could not copy header from first tab: {e}, will create default header")
 
             # Check if sheet has existing data and read existing header
             existing_data = worksheet.get_all_values()
             has_headers = len(existing_data) > 0
+
             existing_header = []
             existing_products = set()
 
             if has_headers:
                 existing_header = existing_data[0] if existing_data else []
-                # Extract existing product columns (everything after the first 6 fixed columns)
+                # Determine the number of fixed columns based on whether "Total Daily Refunds" exists
+                # Old format: 6 columns (before refunds column was added)
+                # New format: 7 columns (with refunds column)
+                fixed_columns = 7  # Default to new format
+                if len(existing_header) >= 6:
+                    # Check if column 7 (index 6) is "Total Daily Refunds" or if we have old format
+                    if len(existing_header) == 6 or (len(existing_header) > 6 and existing_header[6].strip() != 'Total Daily Refunds'):
+                        # Old format - products start at column 7 (index 6)
+                        fixed_columns = 6
+
+                # Extract existing product columns (everything after the fixed columns)
                 # Normalize by stripping whitespace
-                if len(existing_header) > 6:
-                    existing_products = {col.strip() for col in existing_header[6:] if col and col.strip()}
+                if len(existing_header) > fixed_columns:
+                    existing_products = {col.strip() for col in existing_header[fixed_columns:] if col and col.strip()}
                 logger.info(f"Sheet '{worksheet.title}' has existing data: {len(existing_data)} rows")
                 logger.info(f"Existing header has {len(existing_header)} columns, {len(existing_products)} product columns")
             else:
                 logger.info(f"Sheet '{worksheet.title}' is empty, will create headers")
 
         except Exception as e:
-            logger.error(f"Error accessing sheet '{sheet_name}': {str(e)}", exc_info=True)
+            logger.error(f"Error accessing sheet '{month_year_sheet_name}': {str(e)}", exc_info=True)
             return False
 
         # Process orders data (same logic as CSV export)
@@ -539,7 +639,8 @@ def export_to_google_sheets(
                     'Total Ulta Orders',
                     'Total Ulta Commission',
                     'Collected Sales Tax',
-                    'Total Ulta Units'
+                    'Total Ulta Units',
+                    'Total Daily Refunds'
                 ]
                 worksheet.append_row(headers)
                 worksheet.append_row(['No orders found for the selected date range'])
@@ -566,7 +667,6 @@ def export_to_google_sheets(
         filtered_orders = unique_orders
         if start_date and end_date:
             try:
-                from zoneinfo import ZoneInfo
                 start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
                 end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
                 chicago_tz = ZoneInfo("America/Chicago")
@@ -640,6 +740,7 @@ def export_to_google_sheets(
                     'units': 0,
                     'commission': 0.0,
                     'sales_tax': 0.0,
+                    'refunds': 0.0,
                     'products': {}
                 }
 
@@ -705,6 +806,24 @@ def export_to_google_sheets(
                         except (ValueError, TypeError) as e:
                             logger.warning(f"Could not parse tax amount '{tax_amount}': {e}")
 
+                # Process refunds - group by order date (not refund date)
+                # This ensures refunds appear on the same row as the order for daily exports
+                refunds = line.get('refunds', [])
+                if not isinstance(refunds, list):
+                    refunds = []
+
+                for refund in refunds:
+                    if not isinstance(refund, dict):
+                        continue
+
+                    # Add refund amount to the order date's totals (not refund date)
+                    # Use the same date_key as the order so refunds appear on the same row
+                    refund_amount = refund.get('amount', 0)
+                    try:
+                        daily_totals[date_key]['refunds'] += float(refund_amount)
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Could not parse refund amount '{refund_amount}': {e}")
+
         # Sort by date
         sorted_dates = sorted(daily_totals.keys())
         sorted_products = sorted(all_products)
@@ -720,15 +839,22 @@ def export_to_google_sheets(
             'Total Ulta Orders',
             'Total Ulta Commission',
             'Collected Sales Tax',
-            'Total Ulta Units'
+            'Total Ulta Units',
+            'Total Daily Refunds'
         ]
 
         # Merge existing products with new products, maintaining order
         # First add existing products (to preserve order), then add new ones
         all_products_ordered = []
         if has_headers and existing_header:
+            # Determine fixed columns based on header format
+            fixed_columns = 7  # Default to new format
+            if len(existing_header) >= 6:
+                if len(existing_header) == 6 or (len(existing_header) > 6 and existing_header[6].strip() != 'Total Daily Refunds'):
+                    fixed_columns = 6
+
             # Preserve existing product order from header
-            for col in existing_header[6:]:
+            for col in existing_header[fixed_columns:]:
                 if col and col.strip():
                     all_products_ordered.append(col.strip())
 
@@ -742,7 +868,7 @@ def export_to_google_sheets(
 
         headers = base_headers + all_products_ordered
 
-        logger.info(f"Prepared headers: {len(headers)} columns ({len(headers) - 6} product columns)")
+        logger.info(f"Prepared headers: {len(headers)} columns ({len(headers) - 7} product columns)")
         logger.info(f"Products in header: {len(existing_products)} existing + {len(set(sorted_products) - existing_products)} new = {len(all_products_ordered)} total")
 
         # Write or update headers
@@ -783,7 +909,8 @@ def export_to_google_sheets(
                 totals['orders_count'],
                 round(totals['commission'], 2),
                 round(totals['sales_tax'], 2),
-                totals['units']
+                totals['units'],
+                round(totals.get('refunds', 0.0), 2)
             ]
             # Add product quantities - use all_products_ordered to match header
             for product in all_products_ordered:
@@ -814,10 +941,7 @@ def export_to_google_sheets(
                 logger.error(f"Error writing rows to Google Sheets: {str(e)}", exc_info=True)
                 return False
         else:
-            if skipped_dates:
-                logger.info(f"No new rows to append (all {len(skipped_dates)} dates already exist in sheet)")
-            else:
-                logger.warning("No rows to write to Google Sheets!")
+            logger.warning("No rows to write to Google Sheets!")
 
         logger.info(f"=== Successfully exported {len(sorted_dates)} days of aggregated data to Google Sheets ===")
         return True
