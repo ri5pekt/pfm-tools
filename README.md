@@ -1,10 +1,19 @@
 # PFM Tools
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 
 A modern web application for processing sales tax data, managing inventory, and exporting marketplace data with integration to WooCommerce, Braintree, AfterShip, Ulta Marketplace, Zenventory, ShipBob, and Google Sheets.
 
 ## 📝 Changelog
+
+### Version 1.4.0 (2025-11-30)
+- **Ulta Marketplace Tool Enhancements**:
+  - Added "Total Daily Refunds" column (Column G) to both CSV and Google Sheets exports
+  - Refunds are grouped by order date (not refund date) for accurate daily tracking
+  - Refunds display total refund amount in dollars
+  - Auto-generate month+year tab names for Google Sheets (e.g., "November 2025")
+  - Automatically copy header from "Main" tab when creating new month tabs
+  - Fixed product column alignment in Google Sheets after adding refunds column
 
 ### Version 1.3.0 (2025-11-27)
 - **Order Comparison Tool Improvements**:
