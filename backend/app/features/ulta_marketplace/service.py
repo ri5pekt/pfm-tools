@@ -89,11 +89,272 @@ def fetch_ulta_orders(
         client.close()
 
 
+def fetch_ulta_returns(
+    start_date: str,
+    end_date: str,
+    api_key: str,
+    max: int = 999,
+    offset: int = 0
+) -> Dict[str, Any]:
+    """
+    Fetch returns from Ulta API with pagination support.
+
+    Args:
+        start_date: Start date in ISO format
+        end_date: End date in ISO format
+        api_key: Ulta API authorization key
+        max: Maximum records to fetch per page
+        offset: Pagination offset
+
+    Returns:
+        Dictionary with returns data (all pages combined)
+    """
+    client = UltaAPIClient(api_key=api_key)
+    try:
+        all_returns = []
+        current_offset = offset
+        total_count = None
+
+        while True:
+            response = client.get_returns(
+                start_date=start_date,
+                end_date=end_date,
+                max=max,
+                offset=current_offset
+            )
+
+            # Returns API uses 'data' key, not 'returns'
+            returns = response.get('data', [])
+            if total_count is None:
+                total_count = response.get('total_count', len(returns))
+
+            all_returns.extend(returns)
+
+            logger.info(f"Fetched {len(returns)} returns (offset {current_offset}, total so far: {len(all_returns)}/{total_count})")
+
+            # Check if we've got all returns
+            if not returns:
+                # No returns returned, we're done
+                break
+
+            if total_count and len(all_returns) >= total_count:
+                # We've reached the total count
+                break
+
+            # Continue fetching if:
+            # 1. We got fewer than max returns AND we haven't reached total_count yet
+            # 2. Or we got max returns (might be more pages)
+            if len(returns) < max:
+                # Got fewer than max, check if we need more
+                if total_count and len(all_returns) < total_count:
+                    # Still have more to fetch according to total_count
+                    current_offset += len(returns)
+                    continue
+                else:
+                    # No total_count or we've reached it, this is the last page
+                    break
+
+            current_offset += len(returns)
+
+            # Safety limit to prevent infinite loops
+            if current_offset > 100000:
+                logger.warning(f"Pagination safety limit reached at offset {current_offset}")
+                break
+
+        # Return combined response
+        return {
+            'returns': all_returns,
+            'total_count': len(all_returns)
+        }
+    finally:
+        client.close()
+
+
+def fetch_refunds_from_past_days(
+    api_key: str,
+    days: int = 90,
+    max: int = 999
+) -> Dict[str, Any]:
+    """
+    Fetch orders from the past N days to extract refunds.
+    This is used in a second pass to get refunds that occurred on specific dates,
+    regardless of when the original order was placed.
+
+    Args:
+        api_key: Ulta API authorization key
+        days: Number of days to look back (default: 90)
+        max: Maximum records to fetch per page
+
+    Returns:
+        Dictionary with orders data containing refunds
+    """
+    from datetime import datetime, timezone
+
+    # Calculate date range: from (now - days) to now
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+
+    start_date_str = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+    end_date_str = end_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    logger.info(f"Fetching orders from past {days} days for refund extraction: {start_date_str} to {end_date_str}")
+
+    return fetch_ulta_orders(
+        start_date=start_date_str,
+        end_date=end_date_str,
+        api_key=api_key,
+        max=max,
+        offset=0
+    )
+
+
+def extract_refunds_by_date(
+    orders_data: Dict[str, Any],
+    target_start_date: str,
+    target_end_date: str
+) -> Dict[str, float]:
+    """
+    Extract refunds from orders data and group them by refund date.
+    Only includes refunds that occurred within the target date range.
+    Amounts are calculated WITHOUT taxes (amount + shipping_amount only).
+
+    Args:
+        orders_data: Orders data from Ulta API (should have 'orders' key)
+        target_start_date: Start date of the target range (ISO format)
+        target_end_date: End date of the target range (ISO format)
+
+    Returns:
+        Dictionary mapping date strings (YYYY-MM-DD) to total refund amounts (without taxes)
+    """
+    import json
+
+    refunds_by_date = {}
+
+    # Parse target date range
+    try:
+        target_start_dt = datetime.fromisoformat(target_start_date.replace('Z', '+00:00'))
+        target_end_dt = datetime.fromisoformat(target_end_date.replace('Z', '+00:00'))
+        chicago_tz = ZoneInfo("America/Chicago")
+        target_start_chicago = target_start_dt.astimezone(chicago_tz)
+        target_end_chicago = target_end_dt.astimezone(chicago_tz)
+
+        # Extract just the date part (YYYY-MM-DD) for day-level comparison
+        # This ensures we include all refunds that occurred on any day within the range
+        target_start_date_only = target_start_chicago.date()
+        target_end_date_only = target_end_chicago.date()
+    except Exception as e:
+        logger.error(f"Could not parse target date range: {e}")
+        return refunds_by_date
+
+    orders = orders_data.get('orders', [])
+    logger.info(f"Extracting refunds from {len(orders)} orders for date range {target_start_date} to {target_end_date}")
+    logger.info(f"Target date range (Chicago time): {target_start_chicago.strftime('%Y-%m-%d %H:%M:%S %Z')} to {target_end_chicago.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    logger.info(f"Target date range (date only): {target_start_date_only} to {target_end_date_only}")
+
+    refund_count = 0
+    refunds_found_by_date = {}  # For logging
+
+    for order in orders:
+        if not isinstance(order, dict):
+            continue
+
+        # Get order lines
+        order_lines = order.get('order_lines', [])
+        if not isinstance(order_lines, list):
+            if isinstance(order_lines, str):
+                try:
+                    order_lines = json.loads(order_lines)
+                except Exception as e:
+                    logger.warning(f"Could not parse order_lines JSON: {e}")
+                    order_lines = []
+            else:
+                order_lines = []
+
+        # Process each order line's refunds
+        for line in order_lines:
+            if not isinstance(line, dict):
+                continue
+
+            refunds = line.get('refunds', [])
+            if not isinstance(refunds, list):
+                refunds = []
+
+            for refund in refunds:
+                if not isinstance(refund, dict):
+                    continue
+
+                # Get refund date
+                refund_date_str = refund.get('created_date')
+                if not refund_date_str:
+                    continue
+
+                try:
+                    # Parse refund date
+                    if '.' in refund_date_str and 'Z' in refund_date_str:
+                        refund_date_clean = refund_date_str.split('.')[0] + 'Z'
+                    else:
+                        refund_date_clean = refund_date_str
+
+                    refund_utc = datetime.fromisoformat(refund_date_clean.replace('Z', '+00:00'))
+                    refund_chicago = refund_utc.astimezone(chicago_tz)
+
+                    # Extract date part (YYYY-MM-DD) for comparison
+                    refund_date_only = refund_chicago.date()
+
+                    # Check if refund date is within target range (compare dates, not datetimes)
+                    # This ensures we include all refunds that occurred on any day within the range
+                    if target_start_date_only <= refund_date_only <= target_end_date_only:
+                        # Extract date part (YYYY-MM-DD) for grouping
+                        refund_date_key = refund_chicago.strftime('%Y-%m-%d')
+
+                        # Calculate total refund amount WITHOUT taxes
+                        # amount = product amount excluding taxes
+                        # shipping_amount = shipping amount excluding taxes
+                        # Total refund = amount + shipping_amount (NO TAXES)
+                        refund_amount = refund.get('amount', 0)
+                        shipping_amount = refund.get('shipping_amount', 0)
+                        try:
+                            refund_amount_float = float(refund_amount)
+                            shipping_amount_float = float(shipping_amount)
+
+                            # Total refund amount WITHOUT taxes (as requested)
+                            total_refund_amount = refund_amount_float + shipping_amount_float
+
+                            logger.debug(f"Refund {refund.get('id', 'unknown')} on {refund_date_key}: product=${refund_amount_float:.2f}, shipping=${shipping_amount_float:.2f}, total=${total_refund_amount:.2f} (without taxes)")
+
+                            # Add to totals for this date
+                            if refund_date_key not in refunds_by_date:
+                                refunds_by_date[refund_date_key] = 0.0
+                                refunds_found_by_date[refund_date_key] = []
+                            refunds_by_date[refund_date_key] += total_refund_amount
+                            refunds_found_by_date[refund_date_key].append({
+                                'id': refund.get('id', 'unknown'),
+                                'product_amount': refund_amount_float,
+                                'shipping_amount': shipping_amount_float,
+                                'total': total_refund_amount
+                            })
+                            refund_count += 1
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Could not parse refund amount '{refund_amount}': {e}")
+                except Exception as e:
+                    logger.warning(f"Could not parse refund date '{refund_date_str}': {e}")
+                    continue
+
+    logger.info(f"Extracted {refund_count} refunds across {len(refunds_by_date)} unique dates")
+    for date_key, refunds_list in refunds_found_by_date.items():
+        total_for_date = sum(r['total'] for r in refunds_list)
+        logger.info(f"  Date {date_key}: {len(refunds_list)} refund(s), total=${total_for_date:.2f} (without taxes)")
+        for refund_info in refunds_list:
+            logger.info(f"    - Refund {refund_info['id']}: product=${refund_info['product_amount']:.2f}, shipping=${refund_info['shipping_amount']:.2f}, total=${refund_info['total']:.2f}")
+    return refunds_by_date
+
+
 def save_ulta_orders_to_csv(
     orders_data: Dict[str, Any],
     output_path: str,
     start_date: str = None,
-    end_date: str = None
+    end_date: str = None,
+    refunds_by_date: Dict[str, float] = None
 ) -> str:
     """
     Save Ulta orders data to CSV file in aggregated daily format.
@@ -101,6 +362,9 @@ def save_ulta_orders_to_csv(
     Args:
         orders_data: Orders data from Ulta API (should have 'orders' key with list of orders)
         output_path: Path where CSV should be saved
+        start_date: Optional start date for filtering
+        end_date: Optional end date for filtering
+        refunds_by_date: Optional dictionary mapping date strings (YYYY-MM-DD) to refund amounts
 
     Returns:
         Path to saved CSV file
@@ -324,23 +588,41 @@ def save_ulta_orders_to_csv(
                     except (ValueError, TypeError) as e:
                         logger.warning(f"Could not parse tax amount '{tax_amount}': {e}")
 
-            # Process refunds - group by order date (not refund date)
-            # This ensures refunds appear on the same row as the order for daily exports
-            refunds = line.get('refunds', [])
-            if not isinstance(refunds, list):
-                refunds = []
+            # Note: Refunds are now processed separately in a second pass
+            # to group them by refund date instead of order date
 
-            for refund in refunds:
-                if not isinstance(refund, dict):
+    # Merge refunds from second pass into daily_totals
+    if refunds_by_date:
+        logger.info(f"Merging refunds from {len(refunds_by_date)} dates into daily totals")
+        for refund_date_key, refund_amount in refunds_by_date.items():
+            # Ensure the date exists in daily_totals (create if needed for dates with only refunds)
+            if refund_date_key not in daily_totals:
+                try:
+                    # Parse the date and create a datetime object for formatting
+                    refund_date_dt = datetime.strptime(refund_date_key, '%Y-%m-%d')
+                    chicago_tz = ZoneInfo("America/Chicago")
+                    # Create datetime at midnight in Chicago timezone
+                    refund_date_local = chicago_tz.localize(
+                        datetime(refund_date_dt.year, refund_date_dt.month, refund_date_dt.day)
+                    )
+
+                    daily_totals[refund_date_key] = {
+                        'date': refund_date_local,
+                        'gross_sales': 0.0,
+                        'orders_count': 0,
+                        'units': 0,
+                        'commission': 0.0,
+                        'sales_tax': 0.0,
+                        'refunds': 0.0,
+                        'products': {}
+                    }
+                except Exception as e:
+                    logger.warning(f"Could not create daily_totals entry for refund date {refund_date_key}: {e}")
                     continue
 
-                # Add refund amount to the order date's totals (not refund date)
-                # Use the same date_key as the order so refunds appear on the same row
-                refund_amount = refund.get('amount', 0)
-                try:
-                    daily_totals[date_key]['refunds'] += float(refund_amount)
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Could not parse refund amount '{refund_amount}': {e}")
+            # Add refund amount to the date's totals
+            daily_totals[refund_date_key]['refunds'] += refund_amount
+            logger.debug(f"Added refund ${refund_amount:.2f} to date {refund_date_key}")
 
     # Sort by date
     sorted_dates = sorted(daily_totals.keys())
@@ -401,7 +683,8 @@ def export_to_google_sheets(
     oauth_token_path: str = None,
     service_account_path: str = None,
     start_date: str = None,
-    end_date: str = None
+    end_date: str = None,
+    refunds_by_date: Dict[str, float] = None
 ) -> bool:
     """
     Export Ulta orders to Google Sheets in the same format as CSV export.
@@ -411,6 +694,7 @@ def export_to_google_sheets(
     Args:
         orders_data: Orders data from Ulta API (should have 'orders' key with list of orders)
         spreadsheet_id: Google Sheets spreadsheet ID
+        refunds_by_date: Optional dictionary mapping date strings (YYYY-MM-DD) to refund amounts
         sheet_name: Name of the sheet to write to
         oauth_credentials_path: Path to OAuth client credentials JSON file (for OAuth auth)
         oauth_token_path: Path to saved OAuth token file (for OAuth auth)
@@ -806,23 +1090,41 @@ def export_to_google_sheets(
                         except (ValueError, TypeError) as e:
                             logger.warning(f"Could not parse tax amount '{tax_amount}': {e}")
 
-                # Process refunds - group by order date (not refund date)
-                # This ensures refunds appear on the same row as the order for daily exports
-                refunds = line.get('refunds', [])
-                if not isinstance(refunds, list):
-                    refunds = []
+                # Note: Refunds are now processed separately in a second pass
+                # to group them by refund date instead of order date
 
-                for refund in refunds:
-                    if not isinstance(refund, dict):
+        # Merge refunds from second pass into daily_totals
+        if refunds_by_date:
+            logger.info(f"Merging refunds from {len(refunds_by_date)} dates into daily totals for Google Sheets")
+            for refund_date_key, refund_amount in refunds_by_date.items():
+                # Ensure the date exists in daily_totals (create if needed for dates with only refunds)
+                if refund_date_key not in daily_totals:
+                    try:
+                        # Parse the date and create a datetime object for formatting
+                        refund_date_dt = datetime.strptime(refund_date_key, '%Y-%m-%d')
+                        chicago_tz = ZoneInfo("America/Chicago")
+                        # Create datetime at midnight in Chicago timezone
+                        refund_date_local = chicago_tz.localize(
+                            datetime(refund_date_dt.year, refund_date_dt.month, refund_date_dt.day)
+                        )
+
+                        daily_totals[refund_date_key] = {
+                            'date': refund_date_local,
+                            'gross_sales': 0.0,
+                            'orders_count': 0,
+                            'units': 0,
+                            'commission': 0.0,
+                            'sales_tax': 0.0,
+                            'refunds': 0.0,
+                            'products': {}
+                        }
+                    except Exception as e:
+                        logger.warning(f"Could not create daily_totals entry for refund date {refund_date_key}: {e}")
                         continue
 
-                    # Add refund amount to the order date's totals (not refund date)
-                    # Use the same date_key as the order so refunds appear on the same row
-                    refund_amount = refund.get('amount', 0)
-                    try:
-                        daily_totals[date_key]['refunds'] += float(refund_amount)
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Could not parse refund amount '{refund_amount}': {e}")
+                # Add refund amount to the date's totals
+                daily_totals[refund_date_key]['refunds'] += refund_amount
+                logger.debug(f"Added refund ${refund_amount:.2f} to date {refund_date_key} for Google Sheets")
 
         # Sort by date
         sorted_dates = sorted(daily_totals.keys())
@@ -896,9 +1198,33 @@ def export_to_google_sheets(
             else:
                 logger.info("Headers already contain all products, no update needed")
 
-        # Prepare data rows (always append, no duplicate checking)
+            # Re-read existing data after header updates to ensure we have latest state
+            # This is especially important if headers were updated (new product columns added)
+            try:
+                existing_data = worksheet.get_all_values()
+                logger.debug(f"Re-read existing data: {len(existing_data)} rows")
+            except Exception as e:
+                logger.warning(f"Could not re-read existing data after header update: {e}")
+
+        # Build mapping of existing dates to row numbers (1-indexed, row 1 is header)
+        # Date format in sheet is "Nov 1, 2025" (from strftime('%b %d, %Y'))
+        date_to_row = {}
+        if has_headers and len(existing_data) > 1:
+            for row_idx, row_data in enumerate(existing_data[1:], start=2):  # Skip header, start at row 2
+                if row_data and len(row_data) > 0:
+                    existing_date = row_data[0].strip() if row_data[0] else ""  # Date is in first column
+                    if existing_date:
+                        # Normalize: remove extra spaces and make comparison case-insensitive
+                        existing_date_normalized = ' '.join(existing_date.split())
+                        date_to_row[existing_date_normalized] = row_idx
+                        logger.debug(f"Found existing date row {row_idx}: '{existing_date_normalized}'")
+            logger.info(f"Found {len(date_to_row)} existing date rows in sheet: {list(date_to_row.keys())[:5]}{'...' if len(date_to_row) > 5 else ''}")
+
+        # Prepare data rows and determine which to update vs append
         # Use all_products_ordered to match the header structure
-        rows = []
+        rows_to_update = {}  # row_number -> row_data
+        rows_to_append = []  # list of row_data
+
         for date_key in sorted_dates:
             totals = daily_totals[date_key]
             date_formatted = totals['date'].strftime('%b %d, %Y')
@@ -917,17 +1243,39 @@ def export_to_google_sheets(
                 quantity = totals['products'].get(product, 0)
                 row.append(quantity)
 
-            rows.append(row)
-            logger.debug(f"Prepared row for {date_formatted}: {row[:10]}{'...' if len(row) > 10 else ''}")
+            # Normalize date format for comparison (remove extra spaces)
+            date_formatted_normalized = ' '.join(date_formatted.split())
 
-        logger.info(f"Prepared {len(rows)} data rows to append")
+            # Check if this date already exists in the sheet
+            if date_formatted_normalized in date_to_row:
+                row_num = date_to_row[date_formatted_normalized]
+                rows_to_update[row_num] = row
+                logger.info(f"Will UPDATE row {row_num} for date '{date_formatted_normalized}'")
+            else:
+                rows_to_append.append(row)
+                logger.info(f"Will APPEND new row for date '{date_formatted_normalized}' (not found in existing {len(date_to_row)} dates)")
 
-        # Batch write all new rows for better performance
-        if rows:
+        logger.info(f"Prepared {len(rows_to_update)} rows to update and {len(rows_to_append)} rows to append")
+
+        # Update existing rows
+        if rows_to_update:
             try:
-                logger.info(f"Appending {len(rows)} new rows to Google Sheets (batch operation)...")
-                worksheet.append_rows(rows)
-                logger.info(f"Successfully appended {len(rows)} rows to Google Sheets")
+                logger.info(f"Updating {len(rows_to_update)} existing rows in Google Sheets...")
+                for row_num, row_data in rows_to_update.items():
+                    # Update the row (gspread uses A1 notation, e.g., "2:2" for row 2)
+                    range_name = f"{row_num}:{row_num}"
+                    worksheet.update(range_name, [row_data])
+                logger.info(f"Successfully updated {len(rows_to_update)} rows")
+            except Exception as e:
+                logger.error(f"Error updating rows in Google Sheets: {str(e)}", exc_info=True)
+                return False
+
+        # Append new rows
+        if rows_to_append:
+            try:
+                logger.info(f"Appending {len(rows_to_append)} new rows to Google Sheets (batch operation)...")
+                worksheet.append_rows(rows_to_append)
+                logger.info(f"Successfully appended {len(rows_to_append)} rows to Google Sheets")
 
                 # Verify by reading back
                 try:
@@ -938,9 +1286,10 @@ def export_to_google_sheets(
                 except Exception as e:
                     logger.warning(f"Could not verify written data: {e}")
             except Exception as e:
-                logger.error(f"Error writing rows to Google Sheets: {str(e)}", exc_info=True)
+                logger.error(f"Error appending rows to Google Sheets: {str(e)}", exc_info=True)
                 return False
-        else:
+
+        if not rows_to_update and not rows_to_append:
             logger.warning("No rows to write to Google Sheets!")
 
         logger.info(f"=== Successfully exported {len(sorted_dates)} days of aggregated data to Google Sheets ===")

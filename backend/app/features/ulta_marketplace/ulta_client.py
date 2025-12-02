@@ -62,6 +62,66 @@ class UltaAPIClient:
             logger.error(f"Error fetching Ulta orders: {str(e)}")
             raise
 
+    def get_returns(
+        self,
+        start_date: str,
+        end_date: str,
+        max: int = 999,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Fetch returns from Ulta API.
+
+        Args:
+            start_date: Start date in ISO format (e.g., 2025-11-01T00:00:00Z)
+            end_date: End date in ISO format (e.g., 2025-11-01T23:59:00Z)
+            max: Maximum number of records to return (default: 999)
+            offset: Offset for pagination (default: 0)
+
+        Returns:
+            API response as dictionary
+        """
+        url = f"{self.base_url}/api/returns"
+        params = {
+            'start_date': start_date,
+            'end_date': end_date,
+            'max': max,
+            'offset': offset
+        }
+
+        logger.info(f"Fetching Ulta returns from {start_date} to {end_date}")
+        logger.info(f"Request URL: {url}")
+        logger.info(f"Request params: {params}")
+
+        try:
+            response = self.session.get(url, params=params, timeout=30)
+
+            # Log response details for debugging
+            logger.info(f"Returns API response status: {response.status_code}")
+            logger.info(f"Returns API response headers: {dict(response.headers)}")
+
+            if response.status_code == 404:
+                logger.error(f"Returns API endpoint not found (404). URL: {url}")
+                logger.error("The /api/returns endpoint may not exist. Check Mirakl API documentation.")
+                raise requests.exceptions.HTTPError(f"404 Not Found: Returns API endpoint may not exist at {url}")
+
+            response.raise_for_status()
+
+            data = response.json()
+            logger.info(f"Ulta Returns API response received. Status: {response.status_code}")
+            logger.info(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+            logger.info(f"Response data (first 2000 chars): {str(data)[:2000]}")
+
+            return data
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"HTTP error fetching Ulta returns: {str(e)}")
+            if hasattr(e.response, 'text'):
+                logger.error(f"Response body: {e.response.text[:1000]}")
+            raise
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching Ulta returns: {str(e)}")
+            raise
+
     def close(self):
         """Close the session"""
         self.session.close()

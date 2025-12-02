@@ -6,7 +6,12 @@ from datetime import datetime
 from ...core.config import get_settings
 from ...core.db import SessionLocal
 from ...jobs.models import Job
-from .service import fetch_ulta_orders, export_to_google_sheets
+from .service import (
+    fetch_ulta_orders,
+    fetch_refunds_from_past_days,
+    extract_refunds_by_date,
+    export_to_google_sheets
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -84,6 +89,35 @@ def run_ulta_export_job(job_id: int):
             db.commit()
             return
 
+        # Second pass: Fetch orders from past 90 days to extract refunds
+        new_options = dict(options)
+        new_options['progress'] = 30
+        new_options['status_message'] = 'Fetching orders from past 90 days for refunds...'
+        job.options = new_options
+        db.commit()
+        db.refresh(job)
+
+        refunds_by_date = {}
+        try:
+            logger.info("Starting second pass: fetching orders from past 90 days for refund extraction")
+            refunds_orders_data = fetch_refunds_from_past_days(
+                api_key=api_key,
+                days=90
+            )
+            logger.info(f"Successfully fetched {refunds_orders_data.get('total_count', 0)} orders from past 90 days")
+
+            # Extract refunds that occurred within the requested date range
+            refunds_by_date = extract_refunds_by_date(
+                orders_data=refunds_orders_data,
+                target_start_date=start_date,
+                target_end_date=end_date
+            )
+            logger.info(f"Extracted refunds for {len(refunds_by_date)} dates")
+        except Exception as e:
+            logger.error(f"Error fetching/processing refunds: {str(e)}", exc_info=True)
+            # Don't fail the job if refund extraction fails, just log it and continue
+            logger.warning("Continuing without refund data due to error")
+
         # Check if file export is enabled
         export_to_file = options.get("export_to_file", True)  # Default to True for backward compatibility
 
@@ -109,7 +143,13 @@ def run_ulta_export_job(job_id: int):
 
             from .service import save_ulta_orders_to_csv
             try:
-                save_ulta_orders_to_csv(orders_data, output_path, start_date=start_date, end_date=end_date)
+                save_ulta_orders_to_csv(
+                    orders_data,
+                    output_path,
+                    start_date=start_date,
+                    end_date=end_date,
+                    refunds_by_date=refunds_by_date
+                )
                 logger.info(f"CSV file saved: {output_path}")
             except Exception as e:
                 logger.error(f"Error saving CSV file: {str(e)}", exc_info=True)
@@ -165,7 +205,8 @@ def run_ulta_export_job(job_id: int):
                     oauth_token_path=settings.google_sheets_oauth_token_path,
                     service_account_path=settings.google_sheets_service_account_path,
                     start_date=start_date,
-                    end_date=end_date
+                    end_date=end_date,
+                    refunds_by_date=refunds_by_date
                 )
                 if success:
                     logger.info(f"Successfully exported to Google Sheets: {spreadsheet_id}/{sheet_name}")

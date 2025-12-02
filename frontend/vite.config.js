@@ -11,7 +11,7 @@ export default defineConfig({
         },
     },
     server: {
-        host: "localhost",
+        host: "0.0.0.0",
         port: 5173,
         strictPort: true,
         // If later you want to proxy through Vite to avoid CORS, you can uncomment:

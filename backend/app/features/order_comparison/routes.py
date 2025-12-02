@@ -108,9 +108,9 @@ async def upload_csv(
     db.refresh(job)
 
     # Enqueue background job with extended timeout for large datasets
-    # 3600 seconds (1 hour) should be enough for very large order comparisons
-    # At ~2 seconds per page, 360 pages = 720 seconds, plus processing time
-    enqueue_job(run_comparison_job, job.id, job_timeout=3600)
+    # 4 hours (14400 seconds) to handle very large date ranges and many WooCommerce API calls
+    # Large date ranges can require hundreds of API pages, each taking 1-2 seconds
+    enqueue_job(run_comparison_job, job.id, job_timeout=14400)
 
     return {"job_id": job.id}
 

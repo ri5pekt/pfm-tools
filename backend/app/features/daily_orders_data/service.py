@@ -102,12 +102,40 @@ def fetch_daily_orders_data(
                 'page': page_num,
             }
 
-            try:
-                response = session.get(data_url, params=params, timeout=60)
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error fetching page {page_num}: {str(e)}")
-                raise
+            # Retry logic for transient failures
+            max_retries = 3
+            retry_delay = 2  # seconds
+            last_exception = None
+
+            for attempt in range(max_retries):
+                try:
+                    # Increased timeout to 5 minutes (300 seconds) to handle large datasets
+                    # The server may need time to process and return large amounts of data
+                    response = session.get(data_url, params=params, timeout=300)
+                    response.raise_for_status()
+                    last_exception = None
+                    break  # Success, exit retry loop
+                except requests.exceptions.Timeout as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (attempt + 1)  # Exponential backoff
+                        logger.warning(f"Timeout fetching page {page_num} (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Timeout fetching page {page_num} after {max_retries} attempts")
+                        raise
+                except requests.exceptions.RequestException as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (attempt + 1)
+                        logger.warning(f"Error fetching page {page_num} (attempt {attempt + 1}/{max_retries}): {str(e)}, retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Error fetching page {page_num} after {max_retries} attempts: {str(e)}")
+                        raise
+
+            if last_exception:
+                raise last_exception
 
             data = response.json()
 

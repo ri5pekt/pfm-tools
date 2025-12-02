@@ -7,6 +7,7 @@ import DashboardView from "../views/DashboardView.vue";
 import SalesTaxProcessorView from "../views/SalesTaxProcessorView.vue";
 import OrderComparisonView from "../views/OrderComparisonView.vue";
 import UltaMarketplaceView from "../views/UltaMarketplaceView.vue";
+import TikTokMarketplaceView from "../views/TikTokMarketplaceView.vue";
 import InventoryDataView from "../views/InventoryDataView.vue";
 import DailyOrdersDataView from "../views/DailyOrdersDataView.vue";
 
@@ -39,6 +40,11 @@ const routes = [
                 path: "ulta-marketplace",
                 name: "ulta-marketplace",
                 component: UltaMarketplaceView,
+            },
+            {
+                path: "tiktok-marketplace",
+                name: "tiktok-marketplace",
+                component: TikTokMarketplaceView,
             },
             {
                 path: "inventory-data",

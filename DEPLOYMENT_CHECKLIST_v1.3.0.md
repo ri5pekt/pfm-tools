@@ -70,9 +70,9 @@ git log -1 --oneline
 ```bash
 # Upload to WordPress:
 # pfm-tools-utils-woocommerce-plugin-mirror/pfm-tools-utils.php
-# 
+#
 # Key change: Line 33 - METORIK_TZ changed from 'America/New_York' to 'UTC'
-# 
+#
 # After upload, verify plugin is active and test API endpoint:
 curl -u "ck_597bfb235fcc35a4386fbe0c34fd7e72def53b20:cs_2f9188de18d63a3b1a3d937b84400e263c937c1b" \
   "https://www.particleformen.com/wp-json/pfm-tools/v1/orders?date_after=2025-10-02%2000:00:00&date_before=2025-10-02%2023:59:59&per_page=10&page=1"

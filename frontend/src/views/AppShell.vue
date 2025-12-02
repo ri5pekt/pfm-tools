@@ -68,6 +68,14 @@
                         <span>Ulta Marketplace</span>
                     </RouterLink>
                     <RouterLink
+                        to="/app/tiktok-marketplace"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-video"></i>
+                        <span>TikTok Marketplace</span>
+                    </RouterLink>
+                    <RouterLink
                         to="/app/inventory-data"
                         class="nav-item nav-item-child"
                         active-class="nav-item-active"

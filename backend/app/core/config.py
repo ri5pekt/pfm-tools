@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     # Ulta Marketplace API config (optional)
     ulta_api_key: Optional[str] = None
 
+    # TikTok Marketplace API config (optional)
+    tiktok_api_key: Optional[str] = None
+
+    # Order Desk API config (for TikTok Marketplace integration)
+    orderdesk_store_id: Optional[str] = None
+    orderdesk_api_key: Optional[str] = None
+    orderdesk_base_url: str = "https://app.orderdesk.me/api/v2"
+
     # Zenventory API config (optional)
     zenventory_klb_username: Optional[str] = None
     zenventory_klb_password: Optional[str] = None
@@ -78,6 +86,9 @@ class Settings(BaseSettings):
     inventory_google_sheets_spreadsheet_id: Optional[str] = None  # Inventory Data Google Sheets spreadsheet ID
     # Daily Orders Data specific spreadsheet ID
     daily_orders_google_sheets_spreadsheet_id: Optional[str] = None  # Daily Orders Data Google Sheets spreadsheet ID
+    # TikTok Marketplace specific spreadsheet ID
+    tiktok_google_sheets_spreadsheet_id: Optional[str] = None  # TikTok Marketplace Google Sheets spreadsheet ID
+    tiktok_google_sheets_sheet_name: Optional[str] = "TikTok Exports"  # TikTok Marketplace Google Sheets sheet name
 
     # Where to read env vars from
     model_config = SettingsConfigDict(

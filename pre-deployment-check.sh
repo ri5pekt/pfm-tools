@@ -175,7 +175,7 @@ try:
 finally:
     db.close()
 " 2>/dev/null || echo "0")
-    
+
     if [ -n "$SCHEDULED_JOBS" ]; then
         JOB_COUNT=$(echo "$SCHEDULED_JOBS" | head -1)
         if [ "$JOB_COUNT" -gt 0 ]; then

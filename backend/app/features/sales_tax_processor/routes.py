@@ -89,8 +89,9 @@ async def upload_csv(
     db.commit()
     db.refresh(job)
 
-    # Enqueue background job
-    enqueue_job(run_sales_tax_job, job.id)
+    # Enqueue background job with extended timeout for large files
+    # 8 hours timeout (28800 seconds) to handle very large CSV files
+    enqueue_job(run_sales_tax_job, job.id, job_timeout=28800)
 
     return {"job_id": job.id}
 

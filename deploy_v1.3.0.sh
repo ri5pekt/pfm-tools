@@ -136,7 +136,7 @@ read -p "Choice (1 or 2): " restart_choice
 
 if [ "$restart_choice" = "1" ]; then
     echo "Performing rolling restart..."
-    
+
     # Restart workers one at a time
     if [ -f "docker-compose.prod.yml" ]; then
         docker-compose -f docker-compose.prod.yml restart worker
@@ -232,4 +232,10 @@ echo "If issues occur, rollback with:"
 echo "  git checkout v1.2.0"
 echo "  docker-compose restart worker worker2 backend scheduler"
 echo ""
+
+
+
+
+
+
 

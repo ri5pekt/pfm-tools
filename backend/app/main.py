@@ -12,6 +12,7 @@ from app.auth.routes import router as auth_router
 from app.features.sales_tax_processor.routes import router as sales_tax_router
 from app.features.order_comparison.routes import router as order_comparison_router
 from app.features.ulta_marketplace.routes import router as ulta_marketplace_router
+from app.features.tiktok_marketplace.routes import router as tiktok_marketplace_router
 from app.features.inventory_data.routes import router as inventory_data_router
 try:
     from app.features.daily_orders_data.routes import router as daily_orders_data_router
@@ -116,6 +117,9 @@ app.include_router(order_comparison_router)
 
 # Ulta Marketplace → available at /api/app/ulta-marketplace/* (prefix already defined in router)
 app.include_router(ulta_marketplace_router)
+
+# TikTok Marketplace → available at /api/app/tiktok-marketplace/* (prefix already defined in router)
+app.include_router(tiktok_marketplace_router)
 
 # Inventory Data → available at /api/app/inventory-data/* (prefix already defined in router)
 app.include_router(inventory_data_router)
