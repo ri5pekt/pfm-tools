@@ -40,7 +40,7 @@ def find_order_id_column(row: Dict[str, Any], order_id_header: str) -> str:
             return str(value) if value else ""
 
     # Try common variations
-    common_variations = ["order_id", "orderid", "order-id", "OrderID", "Order ID"]
+    common_variations = ["order_id", "orderid", "order-id", "OrderID", "Order ID", "externalId", "external_id", "external-id"]
     for variation in common_variations:
         if variation in row:
             return str(row[variation]) if row[variation] else ""
@@ -77,43 +77,59 @@ def process_batch(
 
     # Extract order IDs from this batch
     order_ids_in_batch = []
+    skipped_rows_no_order_id = 0
     for row in row_batch:
         order_id = find_order_id_column(row, order_id_header)
         if order_id:
             order_ids_in_batch.append(order_id)
+        else:
+            skipped_rows_no_order_id += 1
+            logger.debug(f"Batch {batch_num}: Row skipped - no order ID found in column '{order_id_header}'")
+
+    if skipped_rows_no_order_id > 0:
+        logger.warning(f"Batch {batch_num}: {skipped_rows_no_order_id} rows skipped (no order ID found)")
+    logger.info(f"Batch {batch_num}: Processing {len(order_ids_in_batch)} orders out of {len(row_batch)} rows")
+    if order_ids_in_batch:
+        logger.info(f"Batch {batch_num}: Sample order IDs: {order_ids_in_batch[:10]}{'...' if len(order_ids_in_batch) > 10 else ''}")
 
     # Fetch WooCommerce orders for this batch
-    # Try batch API call first (using 'include' parameter), fall back to parallel individual calls if it fails
+    # Use batch API only, splitting into chunks of 300 orders (WooCommerce REST API supports large batches)
     order_data_cache = {}
     if woo_client and order_ids_in_batch:
-        batch_results = woo_client.get_orders_batch(order_ids_in_batch)
+        logger.info(f"Batch {batch_num}: Fetching {len(order_ids_in_batch)} WooCommerce orders using batch API...")
 
-        # Check if batch fetch failed (all None results indicates batch API failed)
-        if batch_results and len(batch_results) == len(order_ids_in_batch) and all(v is None for v in batch_results.values()):
-            logger.warning(f"Batch {batch_num}: WooCommerce batch API failed. Falling back to parallel individual calls...")
+        # WooCommerce REST API supports batch loading
+        # Use chunks of 30 orders per batch request
+        chunk_size = 30
+        total_found = 0
+        total_not_found = 0
 
-            # Use ThreadPoolExecutor to make parallel API calls
-            # Max 5 concurrent workers to avoid overwhelming the API
-            max_workers = min(5, len(order_ids_in_batch))
+        for i in range(0, len(order_ids_in_batch), chunk_size):
+            chunk = order_ids_in_batch[i:i + chunk_size]
+            chunk_num = (i // chunk_size) + 1
+            total_chunks = (len(order_ids_in_batch) + chunk_size - 1) // chunk_size
 
-            def fetch_order(order_id: str) -> tuple[str, Optional[Dict[str, Any]]]:
-                """Fetch a single order and return (order_id, order_data)"""
-                try:
-                    order_data = woo_client.get_order(order_id)
-                    return (order_id, order_data)
-                except Exception as e:
-                    logger.error(f"Batch {batch_num}: Error fetching order {order_id}: {str(e)}")
-                    return (order_id, None)
+            logger.debug(f"Batch {batch_num}: Fetching chunk {chunk_num}/{total_chunks} ({len(chunk)} orders)...")
+            chunk_results = woo_client.get_orders_batch(chunk)
 
-            # Execute all calls in parallel
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_order = {executor.submit(fetch_order, order_id): order_id for order_id in order_ids_in_batch}
-                for future in as_completed(future_to_order):
-                    order_id, order_data = future.result()
-                    order_data_cache[order_id] = order_data
-        else:
-            # Batch API succeeded!
-            order_data_cache.update(batch_results)
+            # Count found vs not found in this chunk
+            chunk_found = sum(1 for v in chunk_results.values() if v is not None)
+            chunk_not_found = sum(1 for v in chunk_results.values() if v is None)
+            total_found += chunk_found
+            total_not_found += chunk_not_found
+
+            # Add results to cache
+            order_data_cache.update(chunk_results)
+
+            if chunk_not_found > 0:
+                missing_in_chunk = [oid for oid, data in chunk_results.items() if data is None]
+                logger.warning(f"Batch {batch_num}: Chunk {chunk_num} - {chunk_not_found}/{len(chunk)} orders not found: {', '.join(missing_in_chunk[:5])}{'...' if len(missing_in_chunk) > 5 else ''}")
+
+        logger.info(f"Batch {batch_num}: WooCommerce batch fetch complete - Found: {total_found}, Not found: {total_not_found}")
+
+        if total_not_found > 0:
+            all_missing = [oid for oid, data in order_data_cache.items() if data is None]
+            logger.warning(f"Batch {batch_num}: Total orders not found in WooCommerce: {', '.join(all_missing[:10])}{'...' if len(all_missing) > 10 else ''}")
 
     # For each order in this batch, fetch processor data if needed
     braintree_transaction_cache = {}
@@ -123,23 +139,44 @@ def process_batch(
     afterpay_tasks = []
 
     if woo_client:
+        payment_method_stats = {"braintree": 0, "afterpay": 0, "other": 0, "none": 0, "no_order_data": 0}
         for order_id, order_data in order_data_cache.items():
             if not order_data:
+                payment_method_stats["no_order_data"] += 1
+                logger.debug(f"Batch {batch_num}: Order {order_id} - No order data, skipping processor fetch")
                 continue
 
             payment_method = woo_client.get_payment_method_from_data(order_data, order_id)
+            logger.debug(f"Batch {batch_num}: Order {order_id} - Payment method: {payment_method}")
 
             # Collect Braintree tasks
             if braintree_client and payment_method and payment_method.startswith("braintree_"):
+                payment_method_stats["braintree"] += 1
                 transaction_id = woo_client.get_transaction_id_from_data(order_data, order_id)
                 if transaction_id:
                     braintree_tasks.append((transaction_id, order_id))
+                    logger.debug(f"Batch {batch_num}: Order {order_id} - Added Braintree task (transaction_id: {transaction_id})")
+                else:
+                    logger.warning(f"Batch {batch_num}: Order {order_id} - Braintree payment method detected but no transaction_id found")
 
-            # Collect AfterPay tasks
-            elif afterpay_client and payment_method and payment_method.lower() == "afterpay":
+            # Collect AfterPay tasks - check for variations like "afterpay", "afterpay_us", "afterpay_clearpay", etc.
+            elif afterpay_client and payment_method and "afterpay" in payment_method.lower():
+                payment_method_stats["afterpay"] += 1
                 payment_id = woo_client.get_transaction_id_from_data(order_data, order_id)
                 if payment_id:
                     afterpay_tasks.append((payment_id, order_id))
+                    logger.info(f"Batch {batch_num}: Order {order_id} - Added AfterPay task (payment_id: {payment_id}, payment_method: {payment_method})")
+                else:
+                    logger.warning(f"Batch {batch_num}: Order {order_id} - AfterPay payment method detected ({payment_method}) but no transaction_id found")
+            elif payment_method:
+                payment_method_stats["other"] += 1
+                logger.debug(f"Batch {batch_num}: Order {order_id} - Other payment method: {payment_method}")
+            else:
+                payment_method_stats["none"] += 1
+                logger.debug(f"Batch {batch_num}: Order {order_id} - No payment method found")
+
+        logger.info(f"Batch {batch_num}: Payment method stats - Braintree: {payment_method_stats['braintree']}, AfterPay: {payment_method_stats['afterpay']}, Other: {payment_method_stats['other']}, None: {payment_method_stats['none']}, No order data: {payment_method_stats['no_order_data']}")
+        logger.info(f"Batch {batch_num}: Collected {len(braintree_tasks)} Braintree tasks, {len(afterpay_tasks)} AfterPay tasks")
 
         # Fetch Braintree transactions in parallel
         if braintree_tasks:
@@ -161,21 +198,33 @@ def process_batch(
 
         # Fetch AfterPay payments in parallel
         if afterpay_tasks:
+            logger.info(f"Batch {batch_num}: Fetching {len(afterpay_tasks)} AfterPay payments...")
             def fetch_afterpay(payment_id: str, order_id: str) -> tuple[str, Optional[Dict[str, Any]]]:
                 try:
+                    logger.debug(f"Batch {batch_num}: Fetching AfterPay payment {payment_id} for order {order_id}")
                     payment_data = afterpay_client.get_payment(payment_id)
+                    if payment_data:
+                        logger.info(f"Batch {batch_num}: Successfully fetched AfterPay payment {payment_id} for order {order_id}")
+                    else:
+                        logger.warning(f"Batch {batch_num}: AfterPay payment {payment_id} for order {order_id} returned None")
                     return (payment_id, payment_data)
                 except Exception as e:
-                    logger.error(f"Batch {batch_num}: Error fetching AfterPay payment {payment_id}: {str(e)}")
+                    logger.error(f"Batch {batch_num}: Error fetching AfterPay payment {payment_id} for order {order_id}: {str(e)}")
                     return (payment_id, None)
 
             max_workers = min(5, len(afterpay_tasks))
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_task = {executor.submit(fetch_afterpay, pid, oid): (pid, oid) for pid, oid in afterpay_tasks}
+                afterpay_fetched = 0
+                afterpay_failed = 0
                 for future in as_completed(future_to_task):
                     payment_id, payment_data = future.result()
                     if payment_data:
                         afterpay_payment_cache[payment_id] = payment_data
+                        afterpay_fetched += 1
+                    else:
+                        afterpay_failed += 1
+                logger.info(f"Batch {batch_num}: AfterPay fetch complete - Success: {afterpay_fetched}, Failed: {afterpay_failed}")
 
     # Process and write rows with fetched data
     rows_written = 0
@@ -190,8 +239,16 @@ def process_batch(
         if woo_client and order_id_value:
             try:
                 order_data = order_data_cache.get(order_id_value)
+
+                if order_data is None:
+                    logger.warning(f"Batch {batch_num}: Order {order_id_value} - NOT FOUND in WooCommerce (order_data is None)")
+                else:
+                    logger.debug(f"Batch {batch_num}: Order {order_id_value} - Found in WooCommerce cache")
+
                 totals = woo_client.get_order_totals_from_data(order_data, order_id_value)
                 payment_method = woo_client.get_payment_method_from_data(order_data, order_id_value)
+
+                logger.debug(f"Batch {batch_num}: Order {order_id_value} - Totals: {totals}, Payment method: {payment_method}")
 
                 row["woo_total_tax"] = str(totals["total_with_tax"]) if totals["total_with_tax"] is not None else ""
                 row["woo_tax"] = str(totals["tax"]) if totals["tax"] is not None else ""
@@ -210,21 +267,31 @@ def process_batch(
                         row["processor_tax"] = str(braintree_data["braintree_tax_amount"]) if braintree_data["braintree_tax_amount"] is not None else ""
                         processor_data_added = True
 
-                # AfterPay
-                elif afterpay_client and payment_method and payment_method.lower() == "afterpay":
+                # AfterPay - check for variations like "afterpay", "afterpay_us", "afterpay_clearpay", etc.
+                elif afterpay_client and payment_method and "afterpay" in payment_method.lower():
                     payment_id = woo_client.get_transaction_id_from_data(order_data, order_id_value)
                     if payment_id:
                         payment_data = afterpay_payment_cache.get(payment_id)
                         if payment_data:
+                            logger.debug(f"Batch {batch_num}: Order {order_id_value} - Processing AfterPay data (payment_id: {payment_id}, payment_method: {payment_method})")
                             afterpay_data = afterpay_client.get_payment_data_from_dict(payment_data, payment_id)
                             row["processor_total"] = str(afterpay_data["processor_total"]) if afterpay_data["processor_total"] is not None else ""
                             row["processor_tax"] = str(afterpay_data["processor_tax"]) if afterpay_data["processor_tax"] is not None else ""
                             processor_data_added = True
+                            logger.info(f"Batch {batch_num}: Order {order_id_value} - AfterPay data added: total={row['processor_total']}, tax={row['processor_tax']}")
+                        else:
+                            logger.warning(f"Batch {batch_num}: Order {order_id_value} - AfterPay payment_id {payment_id} found but no payment_data in cache")
+                    else:
+                        logger.warning(f"Batch {batch_num}: Order {order_id_value} - AfterPay payment method ({payment_method}) detected but no transaction_id found")
 
                 # Set empty processor columns if not added
                 if not processor_data_added and (braintree_client or afterpay_client):
                     row["processor_total"] = ""
                     row["processor_tax"] = ""
+                    if payment_method:
+                        logger.debug(f"Batch {batch_num}: Order {order_id_value} - No processor data added (payment_method: {payment_method})")
+                    else:
+                        logger.debug(f"Batch {batch_num}: Order {order_id_value} - No processor data added (no payment method)")
 
             except Exception as e:
                 logger.error(f"Error processing WooCommerce data for order {order_id_value}: {str(e)}", exc_info=True)
@@ -236,6 +303,7 @@ def process_batch(
                     row["processor_tax"] = ""
         elif woo_client:
             # No order ID
+            logger.debug(f"Batch {batch_num}: Row skipped - no order ID found")
             row["woo_total_tax"] = ""
             row["woo_tax"] = ""
             row["woo_payment_method"] = ""
@@ -290,7 +358,9 @@ def process_sales_tax_job(job_id: int, db_session_factory):
             return
 
         # Get order_id_header from job options
-        order_id_header = job.options.get("order_id_header", "OrderID") if job.options else "OrderID"
+        # Default to "externalId" for Complyt CSV files, fallback to "OrderID"
+        order_id_header = job.options.get("order_id_header", "externalId") if job.options else "externalId"
+        logger.info(f"Using order_id_header: '{order_id_header}'")
 
         # Check if WooCommerce integration is enabled
         woo_enabled = job.options.get("woo", True) if job.options else True

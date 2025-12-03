@@ -203,9 +203,18 @@ class WooCommerceClient:
         try:
             url = f"{self.api_base}/orders"
             # WooCommerce REST API supports batch loading using 'include' parameter
-            # Can be passed as comma-separated string or list
+            # Format: /wp-json/wc/v3/orders?include=123,456,789&per_page=100
             # Using comma-separated string for better compatibility
-            params = {'include': ','.join(clean_order_ids)}
+            # Add per_page=100 to return more than the default 10 orders
+            include_param = ','.join(clean_order_ids)
+            params = {
+                'include': include_param,
+                'per_page': 100  # Allow up to 100 orders per request
+            }
+
+            # Log the exact URL being called
+            full_url = f"{url}?include={include_param}&per_page=100"
+            logger.debug(f"Batch API URL: {full_url} (requesting {len(clean_order_ids)} orders)")
 
             response = self.session.get(url, params=params, timeout=30)  # Longer timeout for batch
 
@@ -221,6 +230,11 @@ class WooCommerceClient:
 
             orders_data = response.json()
 
+            logger.info(f"Batch API returned {len(orders_data)} orders (requested {len(clean_order_ids)} orders)")
+            if orders_data:
+                sample_order_ids = [str(o.get('id', '')) for o in orders_data[:5]]
+                logger.debug(f"Sample returned order IDs: {sample_order_ids}")
+
             # Create a dictionary mapping order ID to order data
             # WooCommerce returns orders as a list, we need to index by ID
             result = {}
@@ -228,11 +242,17 @@ class WooCommerceClient:
                 order_id = str(order.get('id', ''))
                 if order_id:
                     result[order_id] = order
+                    logger.debug(f"Batch API: Mapped order ID {order_id}")
 
             # Mark missing orders as None
+            missing_orders = []
             for order_id in clean_order_ids:
                 if order_id not in result:
                     result[order_id] = None
+                    missing_orders.append(order_id)
+
+            if missing_orders:
+                logger.warning(f"Batch API: {len(missing_orders)} orders not found in response. Sample missing: {missing_orders[:10]}")
 
             return result
 
