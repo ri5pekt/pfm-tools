@@ -370,7 +370,7 @@ def process_sales_tax_job(job_id: int, db_session_factory):
 
         # Process in batches: fetch WooCommerce orders, get processor data, process rows, repeat
         # This is more memory-efficient and provides better progress feedback
-        batch_size = 20
+        batch_size = 30
         logger.info(f"Processing {total_rows} rows in batches of {batch_size}")
 
         # Process CSV file - stream processing in batches
