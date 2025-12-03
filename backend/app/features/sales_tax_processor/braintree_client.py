@@ -78,7 +78,6 @@ class BraintreeClient:
         Returns:
             Transaction data dictionary or None if not found/error
         """
-        api_start = time.time()
         try:
             # Clean transaction_id (remove any whitespace)
             original_transaction_id = transaction_id
