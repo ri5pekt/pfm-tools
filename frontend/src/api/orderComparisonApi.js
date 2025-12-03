@@ -1,5 +1,5 @@
 // frontend/src/api/orderComparisonApi.js
-import { http } from "./http";
+import { http, API_BASE_URL } from "./http";
 
 export function uploadComparison(file, orderIdHeader, dateFrom, dateTo, usaOnly = true, excludeStates = [], excludeComplytStates = []) {
     const formData = new FormData();
@@ -57,7 +57,6 @@ export function getJob(jobId) {
 }
 
 export function downloadJob(jobId) {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
     const token = localStorage.getItem("pfm_token");
 
     return fetch(`${API_BASE_URL}/app/order-comparison/job/${jobId}/download`, {
