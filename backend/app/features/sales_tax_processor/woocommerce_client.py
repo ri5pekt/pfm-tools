@@ -208,7 +208,7 @@ class WooCommerceClient:
             params = {'include': ','.join(clean_order_ids)}
 
             response = self.session.get(url, params=params, timeout=30)  # Longer timeout for batch
-            
+
             if response.status_code != 200:
                 error_text = response.text[:500] if hasattr(response, 'text') else 'N/A'
                 logger.error(f"Batch API failed with status {response.status_code}: {error_text}")

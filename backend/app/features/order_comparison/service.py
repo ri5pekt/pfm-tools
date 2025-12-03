@@ -114,6 +114,30 @@ def _process_complyt_row(row: Dict, order_id_header: str, result: Dict) -> None:
     transaction_type = row.get('transactionType', '').strip()
     total_items_amount = row.get('totalItemsAmount', '0')
 
+    # Extract transaction date - try multiple possible column names
+    # Complyt CSV uses 'externalTimestamps.createdDate' (e.g., "2025-10-01T04:05:27.000Z")
+    transaction_date = ''
+    date_fields = ['externalTimestamps.createdDate', 'externalTimestamps.created_date', 'transactionDate', 'date', 'createdAt', 'created_at', 'transaction_date', 'dateCreated', 'date_created', 'externalTimestamps.created', 'createdDate']
+    for field in date_fields:
+        if field in row and row[field]:
+            transaction_date = str(row[field]).strip()
+            if transaction_date:
+                break
+
+    # Try to parse and format the date if found
+    formatted_date = 'N/A'
+    if transaction_date:
+        try:
+            utc_tz = pytz.UTC
+            parsed_date = _parse_complyt_date(transaction_date, utc_tz)
+            if parsed_date:
+                formatted_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                formatted_date = transaction_date  # Keep original if parsing fails
+        except Exception as e:
+            logger.debug(f"Error parsing date '{transaction_date}': {str(e)}")
+            formatted_date = transaction_date  # Keep original if parsing fails
+
     try:
         amount = float(total_items_amount) if total_items_amount else 0.0
     except (ValueError, TypeError):
@@ -122,12 +146,39 @@ def _process_complyt_row(row: Dict, order_id_header: str, result: Dict) -> None:
     if transaction_type == 'INVOICE':
         result['invoices'].append(order_id)
         result['invoice_amounts'][order_id] = amount
+        result['invoice_dates'][order_id] = formatted_date
     elif transaction_type == 'TAXABLE_REFUND':
         result['taxable_refunds'].append(order_id)
         result['taxable_refund_amounts'][order_id] = abs(amount)  # Make positive for reporting
+        result['taxable_refund_dates'][order_id] = formatted_date
+        # Try to find parent order ID - refund IDs might match order IDs or be in a separate field
+        parent_order_id = ''
+        parent_id_fields = ['orderId', 'parentOrderId', 'externalId', 'order_id', 'parent_order_id', 'parentId', 'parent_id']
+        for field in parent_id_fields:
+            if field in row and row[field]:
+                parent_order_id = str(row[field]).strip()
+                if parent_order_id:
+                    break
+        if parent_order_id:
+            result['taxable_refund_parent_order_ids'][order_id] = parent_order_id
+        else:
+            result['taxable_refund_parent_order_ids'][order_id] = 'N/A'
     elif transaction_type == 'REFUND':
         result['refunds'].append(order_id)
         result['refund_amounts'][order_id] = abs(amount)  # Make positive for reporting
+        result['refund_dates'][order_id] = formatted_date
+        # Try to find parent order ID - refund IDs might match order IDs or be in a separate field
+        parent_order_id = ''
+        parent_id_fields = ['orderId', 'parentOrderId', 'externalId', 'order_id', 'parent_order_id', 'parentId', 'parent_id']
+        for field in parent_id_fields:
+            if field in row and row[field]:
+                parent_order_id = str(row[field]).strip()
+                if parent_order_id:
+                    break
+        if parent_order_id:
+            result['refund_parent_order_ids'][order_id] = parent_order_id
+        else:
+            result['refund_parent_order_ids'][order_id] = 'N/A'
 
 
 def parse_complyt_csv(file_path: str, order_id_header: str, date_from: str = None, date_to: str = None, exclude_states: Optional[List[str]] = None, usa_only: bool = False) -> Dict[str, Any]:
@@ -216,10 +267,34 @@ def parse_complyt_csv(file_path: str, order_id_header: str, date_from: str = Non
 
             # Read first row to identify country and state fields if needed
             first_row = None
+            csv_columns = None
             if country_filter_enabled or state_filter_enabled:
                 try:
                     first_row = next(reader, None)
                     if first_row:
+                        csv_columns = list(first_row.keys())
+                        logger.info(f"Complyt CSV columns available: {csv_columns}")
+                        # Log which date and parent order ID columns are found
+                        date_fields = ['externalTimestamps.createdDate', 'externalTimestamps.created_date', 'transactionDate', 'date', 'createdAt', 'created_at', 'transaction_date', 'dateCreated', 'date_created', 'externalTimestamps.created', 'createdDate']
+                        found_date_field = None
+                        for field in date_fields:
+                            if field in first_row:
+                                found_date_field = field
+                                logger.info(f"Found date field in CSV: '{found_date_field}'")
+                                break
+                        if not found_date_field:
+                            logger.warning(f"No date field found in CSV. Tried: {date_fields}")
+                            logger.warning(f"Available columns containing 'date' or 'timestamp': {[c for c in csv_columns if 'date' in c.lower() or 'timestamp' in c.lower()]}")
+
+                        parent_id_fields = ['orderId', 'parentOrderId', 'externalId', 'order_id', 'parent_order_id', 'parentId', 'parent_id']
+                        found_parent_id_field = None
+                        for field in parent_id_fields:
+                            if field in first_row:
+                                found_parent_id_field = field
+                                logger.info(f"Found parent order ID field in CSV: '{found_parent_id_field}'")
+                                break
+                        if not found_parent_id_field:
+                            logger.warning(f"No parent order ID field found in CSV. Tried: {parent_id_fields}")
                         # Find country field
                         if country_filter_enabled:
                             for candidate in country_field_candidates:
@@ -377,10 +452,39 @@ def fetch_woocommerce_orders(
         # For date_to, we use the end of the day (23:59:59) to ensure we include the entire day
         # The WooCommerce plugin converts this to a timestamp and uses it in the date_created filter
         # Using 23:59:59 ensures all orders created on date_to are included
-        after_date = f"{date_from} 00:00:00"
-        before_date = f"{date_to} 23:59:59"  # End of date_to day to include all orders created that day
+        #
+        # TIMEZONE NOTE: Complyt CSV dates are in UTC (e.g., "2025-11-01T00:00:03.000Z" = Nov 1, 2025 00:00:03 UTC)
+        # WooCommerce stores dates in UTC in the database (date_created_gmt field)
+        # The plugin interprets date_after/date_before as UTC timestamps
+        #
+        # IMPORTANT: There can be a timezone offset issue:
+        # - Orders created late on Oct 31 local time (e.g., 7pm EDT = UTC-4) = Nov 1 00:00 UTC
+        # - These orders appear in Complyt CSV as Nov 1 (UTC)
+        # - But if user selects "Oct 1-2" or "Nov 1-2", we need to account for potential timezone offsets
+        #
+        # Solution: Expand the date range by 1 day before and after to account for timezone differences
+        # This ensures we capture all orders that might appear in the Complyt CSV for the selected date range
+        from datetime import datetime, timedelta
 
-        logger.info(f"Fetching WooCommerce orders from {after_date} to {before_date}")
+        # Parse the date_from and date_to strings
+        date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
+        date_to_dt = datetime.strptime(date_to, '%Y-%m-%d')
+
+        # Adjust for timezone offset: WooCommerce site is in America/New_York (EDT = UTC-4, EST = UTC-5)
+        # Orders created late on the previous day local time appear as early next day UTC
+        # So if user selects Oct 1-2, we need to fetch from Sept 30 late evening UTC to Oct 3 early morning UTC
+        # This accounts for orders created on Sept 30 11pm EDT (Oct 1 3am UTC) and Oct 2 11pm EDT (Oct 3 3am UTC)
+        # Using 4 hours offset to cover EDT (UTC-4) - this ensures we capture all orders
+        expanded_from_dt = date_from_dt - timedelta(hours=4)  # Start 4 hours earlier UTC
+        expanded_to_dt = date_to_dt + timedelta(days=1, hours=4)  # End 4 hours after next day UTC
+
+        after_date = expanded_from_dt.strftime('%Y-%m-%d %H:%M:%S')
+        before_date = expanded_to_dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        logger.info(f"Fetching WooCommerce orders:")
+        logger.info(f"  User selected date range: {date_from} to {date_to}")
+        logger.info(f"  Adjusted date range (UTC): {after_date} to {before_date} (adjusted for EDT timezone offset: UTC-4)")
+        logger.info(f"  This will fetch orders with date_created_gmt between {after_date} and {before_date} UTC")
 
         # Verify API keys are set
         if not woo_client.consumer_key or not woo_client.consumer_secret:
@@ -675,9 +779,18 @@ def fetch_woocommerce_orders(
                     processing_progress = 95 + int((processed_count / total_orders) * 3)  # 95-98%
                     update_progress(processing_progress, f'Processing orders... {processed_count}/{total_orders} ({total_refunds_found} refunds)')
 
-            order_id = str(order.get('id', ''))
-            if not order_id:
-                logger.warning(f"Skipping order with no ID: {order}")
+            # Get order ID - plugin should return 'id' field, but handle None case
+            order_id_raw = order.get('id')
+            if order_id_raw is None:
+                # Plugin might not have 'id' field yet (needs update), try to get from order data
+                # Check if there's an index or other identifier
+                logger.warning(f"Order missing 'id' field: {list(order.keys())[:10]}")
+                # Skip orders without ID - they can't be matched
+                continue
+
+            order_id = str(order_id_raw).strip()
+            if not order_id or order_id == 'None':
+                logger.warning(f"Skipping order with invalid ID: {order_id_raw}, order keys: {list(order.keys())[:10]}")
                 continue
 
             status = order.get('status', '')
@@ -706,16 +819,24 @@ def fetch_woocommerce_orders(
                 orders_with_refunds_count += 1
                 logger.debug(f"Order {order_id} has {len(refunds)} refund(s) in response")
                 for refund in refunds:
+                    # Get refund ID - plugin now includes 'id' field
                     refund_id = str(refund.get('id', ''))
-                    if refund_id:
-                        # Custom endpoint uses 'amount' field instead of 'total'
-                        refund_amount = float(refund.get('amount', '0') or '0')
-                        # Ensure order_id is stored in refund data for later reference
-                        refund['order_id'] = order_id
-                        result['refunds'][refund_id] = refund
-                        result['refund_amounts'][refund_id] = abs(refund_amount)
-                        total_refunds_found += 1
-                        logger.debug(f"Added refund {refund_id} for order {order_id}, amount: {abs(refund_amount)}")
+                    if not refund_id:
+                        # Fallback: if no ID, skip this refund (shouldn't happen with updated plugin)
+                        logger.warning(f"Refund missing ID in order {order_id}, skipping")
+                        continue
+
+                    # Custom endpoint uses 'amount' field instead of 'total'
+                    refund_amount = float(refund.get('amount', '0') or '0')
+
+                    # Get parent order ID - plugin now includes 'order_id' field, but keep fallback
+                    parent_order_id = refund.get('order_id', order_id)
+                    refund['order_id'] = parent_order_id  # Ensure order_id is stored
+
+                    result['refunds'][refund_id] = refund
+                    result['refund_amounts'][refund_id] = abs(refund_amount)
+                    total_refunds_found += 1
+                    logger.debug(f"Added refund {refund_id} for order {parent_order_id}, amount: {abs(refund_amount)}")
 
         processing_end_time = time.time()
         total_processing_duration = processing_end_time - processing_start_time
@@ -1114,7 +1235,65 @@ def generate_comparison_report_csvs(
     # Find differences
     # Normalize order IDs to strings for consistent comparison
     complyt_order_ids = set(str(oid).strip() for oid in complyt_data['invoices'])
-    woo_order_ids = set(str(oid).strip() for oid in woo_data['orders'].keys())
+
+    # Filter WooCommerce orders by the original date range (not the expanded range used for fetching)
+    # This prevents false positives in "orders in WooCommerce but not in Complyt" report
+    # We fetch with expanded range to ensure we don't miss matches, but filter for comparison
+    # IMPORTANT: Plugin returns date_created in local timezone, but we need to compare in UTC
+    # to match Complyt CSV dates (which are in UTC)
+    woo_order_ids_filtered = set()
+    if date_from and date_to:
+        # Parse dates for filtering (user-selected dates are interpreted as UTC, matching Complyt CSV)
+        date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
+        date_to_dt = datetime.strptime(date_to, '%Y-%m-%d')
+        # Use start of date_from and end of date_to (inclusive) in UTC
+        filter_start = pytz.UTC.localize(date_from_dt.replace(hour=0, minute=0, second=0))
+        filter_end = pytz.UTC.localize(date_to_dt.replace(hour=23, minute=59, second=59))
+
+        logger.info(f"Filtering WooCommerce orders by original date range: {date_from} to {date_to} (UTC)")
+        filtered_count = 0
+        for order_id, order in woo_data['orders'].items():
+            # Always use date_created_gmt (UTC) for filtering - this is the correct UTC date
+            order_date_str = order.get('date_created_gmt')
+            if not order_date_str:
+                # Fallback to date_created if date_created_gmt is not available (shouldn't happen with updated plugin)
+                order_date_str = order.get('date_created', '')
+                logger.warning(f"Order {order_id} missing date_created_gmt, using date_created: {order_date_str}")
+
+            if order_date_str:
+                try:
+                    # Parse order date (format: "2025-10-31 19:00:03" or "2025-10-31T19:00:03")
+                    if 'T' in order_date_str:
+                        order_date_naive = datetime.strptime(order_date_str.split('.')[0], '%Y-%m-%dT%H:%M:%S')
+                    else:
+                        order_date_naive = datetime.strptime(order_date_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
+
+                    # date_created_gmt is already UTC, so localize it as UTC
+                    order_date_utc = pytz.UTC.localize(order_date_naive)
+
+                    # Check if order date falls within the original date range (UTC comparison)
+                    if filter_start <= order_date_utc <= filter_end:
+                        woo_order_ids_filtered.add(str(order_id).strip())
+                    else:
+                        filtered_count += 1
+                        # Log first few filtered orders for debugging
+                        if filtered_count <= 5:
+                            logger.debug(f"Filtered out order {order_id}: date_created_gmt={order_date_str} (UTC) is outside range {date_from} to {date_to}")
+                except (ValueError, AttributeError) as e:
+                    # If date parsing fails, include the order (better to have false positives than miss matches)
+                    logger.warning(f"Could not parse date for order {order_id}: {order_date_str}, including in comparison")
+                    woo_order_ids_filtered.add(str(order_id).strip())
+            else:
+                # If no date, include the order (better to have false positives than miss matches)
+                woo_order_ids_filtered.add(str(order_id).strip())
+
+        logger.info(f"Filtered out {filtered_count} WooCommerce orders outside original date range")
+        logger.info(f"WooCommerce orders within date range: {len(woo_order_ids_filtered)}")
+    else:
+        # No date filtering - use all orders
+        woo_order_ids_filtered = set(str(oid).strip() for oid in woo_data['orders'].keys())
+
+    woo_order_ids = woo_order_ids_filtered
 
     complyt_refund_ids = set(str(oid).strip() for oid in complyt_data['taxable_refunds'] + complyt_data['refunds'])
     woo_refund_ids = set(str(oid).strip() for oid in woo_data['refunds'].keys())
@@ -1125,7 +1304,23 @@ def generate_comparison_report_csvs(
     logger.info(f"WooCommerce order IDs count: {len(woo_order_ids)}")
     logger.info(f"Sample Complyt order IDs (first 10): {sorted(list(complyt_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:10]}")
     logger.info(f"Sample WooCommerce order IDs (first 10): {sorted(list(woo_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:10]}")
-    
+
+    # Check for specific orders that are in the CSV but might be missing
+    test_order_ids = ['3364755', '3364760', '3364762', '3364763', '3364765']
+    logger.info(f"\nChecking specific test orders:")
+    for test_id in test_order_ids:
+        in_complyt = test_id in complyt_order_ids
+        in_woo = test_id in woo_order_ids
+        in_woo_data = test_id in woo_data['orders']
+        logger.info(f"  Order {test_id}:")
+        logger.info(f"    In Complyt: {in_complyt}")
+        logger.info(f"    In WooCommerce IDs set: {in_woo}")
+        logger.info(f"    In WooCommerce data dict: {in_woo_data}")
+        if in_woo_data:
+            order = woo_data['orders'][test_id]
+            logger.info(f"    Order date_created: {order.get('date_created')}")
+            logger.info(f"    Order status: {order.get('status')}")
+
     # Check for ID format mismatches
     sample_complyt_ids = sorted(list(complyt_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:5]
     for sample_id in sample_complyt_ids:
@@ -1144,7 +1339,7 @@ def generate_comparison_report_csvs(
                     break
             except ValueError:
                 pass
-        
+
         if not found_match and sample_id in complyt_order_ids:
             logger.warning(f"Order ID {sample_id} from Complyt NOT found in WooCommerce order IDs")
             # Try to find this order in WooCommerce by querying
@@ -1163,7 +1358,7 @@ def generate_comparison_report_csvs(
 
     orders_in_complyt_not_woo = sorted(complyt_order_ids - woo_order_ids, key=lambda x: int(x) if x.isdigit() else 0)
     orders_in_woo_not_complyt = sorted(woo_order_ids - complyt_order_ids, key=lambda x: int(x) if x.isdigit() else 0)
-    
+
     logger.info(f"Orders in Complyt but not in WooCommerce: {len(orders_in_complyt_not_woo)}")
     if orders_in_complyt_not_woo:
         logger.warning(f"  Sample order IDs: {orders_in_complyt_not_woo[:20]}")
@@ -1228,7 +1423,14 @@ def generate_comparison_report_csvs(
             writer.writerow(['Order ID', 'Amount', 'Order Date'])
             for order_id in orders_in_complyt_not_woo:
                 amount = complyt_data['invoice_amounts'].get(order_id, 0)
+                # Try to get date from Complyt CSV first
                 order_date = complyt_data.get('invoice_dates', {}).get(order_id, 'N/A')
+                # If not found in Complyt, try WooCommerce (order might exist but wasn't matched)
+                if order_date == 'N/A' or order_date == '':
+                    woo_order = woo_data['orders'].get(order_id)
+                    if woo_order:
+                        order_date = woo_order.get('date_created', 'N/A')
+                        logger.info(f"Order {order_id}: Using WooCommerce date {order_date} (not found in Complyt CSV)")
                 writer.writerow([order_id, amount, order_date])
         csv_files.append(orders_complyt_not_woo_path)
 
@@ -1237,12 +1439,13 @@ def generate_comparison_report_csvs(
         orders_woo_not_complyt_path = os.path.join(output_dir, "orders_in_woocommerce_not_complyt.csv")
         with open(orders_woo_not_complyt_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Order ID', 'Status', 'Total', 'Date Created'])
+            writer.writerow(['Order ID', 'Status', 'Total', 'Date Created (UTC)'])
             for order_id in orders_in_woo_not_complyt:
                 order = woo_data['orders'].get(order_id, {})
                 status = order.get('status', 'N/A')
                 total = order.get('total', '0')
-                date_created = order.get('date_created', 'N/A')
+                # Use date_created_gmt (UTC) for accurate date display - this matches what we filter by
+                date_created = order.get('date_created_gmt') or order.get('date_created', 'N/A')
                 writer.writerow([order_id, status, total, date_created])
         csv_files.append(orders_woo_not_complyt_path)
 
@@ -1264,6 +1467,17 @@ def generate_comparison_report_csvs(
                     amount = complyt_data['refund_amounts'].get(refund_id, 0)
                     parent_order_id = complyt_data.get('refund_parent_order_ids', {}).get(refund_id, 'N/A')
                     refund_date = complyt_data.get('refund_dates', {}).get(refund_id, 'N/A')
+
+                # If parent order ID or date not found in Complyt, try WooCommerce
+                if (parent_order_id == 'N/A' or parent_order_id == '') or (refund_date == 'N/A' or refund_date == ''):
+                    woo_refund = woo_data['refunds'].get(refund_id)
+                    if woo_refund:
+                        if parent_order_id == 'N/A' or parent_order_id == '':
+                            parent_order_id = woo_refund.get('order_id', 'N/A')
+                        if refund_date == 'N/A' or refund_date == '':
+                            refund_date = woo_refund.get('date_created', 'N/A')
+                        logger.info(f"Refund {refund_id}: Using WooCommerce data (parent_order_id={parent_order_id}, date={refund_date})")
+
                 writer.writerow([refund_id, refund_type, amount, parent_order_id, refund_date])
         csv_files.append(refunds_complyt_not_woo_path)
 
