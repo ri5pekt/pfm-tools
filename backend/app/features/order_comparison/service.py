@@ -166,6 +166,11 @@ def parse_complyt_csv(file_path: str, order_id_header: str, date_from: str = Non
         'invoice_amounts': {},
         'taxable_refund_amounts': {},
         'refund_amounts': {},
+        'invoice_dates': {},
+        'taxable_refund_dates': {},
+        'refund_dates': {},
+        'taxable_refund_parent_order_ids': {},
+        'refund_parent_order_ids': {},
     }
 
     # Country filtering: Complyt CSV uses 'shippingAddress.country' column with value 'USA'
@@ -1114,13 +1119,72 @@ def generate_comparison_report_csvs(
     complyt_refund_ids = set(str(oid).strip() for oid in complyt_data['taxable_refunds'] + complyt_data['refunds'])
     woo_refund_ids = set(str(oid).strip() for oid in woo_data['refunds'].keys())
 
+    # Detailed logging for debugging order comparison issues
+    logger.info(f"=== ORDER COMPARISON DEBUG ===")
+    logger.info(f"Complyt order IDs count: {len(complyt_order_ids)}")
+    logger.info(f"WooCommerce order IDs count: {len(woo_order_ids)}")
+    logger.info(f"Sample Complyt order IDs (first 10): {sorted(list(complyt_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:10]}")
+    logger.info(f"Sample WooCommerce order IDs (first 10): {sorted(list(woo_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:10]}")
+    
+    # Check for ID format mismatches
+    sample_complyt_ids = sorted(list(complyt_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:5]
+    for sample_id in sample_complyt_ids:
+        # Check if this ID exists in WooCommerce with different formatting
+        found_match = False
+        for woo_id in woo_order_ids:
+            if str(sample_id).strip() == str(woo_id).strip():
+                found_match = True
+                logger.debug(f"Order ID {sample_id} matches WooCommerce ID {woo_id} (exact match)")
+                break
+            # Check if they're the same when converted to int (handles leading zeros)
+            try:
+                if int(sample_id) == int(woo_id):
+                    logger.warning(f"Order ID {sample_id} matches WooCommerce ID {woo_id} (numeric match, format differs)")
+                    found_match = True
+                    break
+            except ValueError:
+                pass
+        
+        if not found_match and sample_id in complyt_order_ids:
+            logger.warning(f"Order ID {sample_id} from Complyt NOT found in WooCommerce order IDs")
+            # Try to find this order in WooCommerce by querying
+            logger.warning(f"  Checking if order {sample_id} exists in WooCommerce data...")
+            if sample_id in woo_data['orders']:
+                logger.error(f"  ERROR: Order {sample_id} EXISTS in woo_data['orders'] but not in woo_order_ids set!")
+                logger.error(f"    Order data: {woo_data['orders'][sample_id]}")
+            else:
+                logger.warning(f"  Order {sample_id} not found in woo_data['orders'] dictionary")
+
     # Check if any refund IDs are incorrectly in the orders dictionary and remove them
     refund_ids_in_orders = woo_order_ids & woo_refund_ids
     if refund_ids_in_orders:
+        logger.warning(f"Found {len(refund_ids_in_orders)} refund IDs incorrectly in orders dictionary: {list(refund_ids_in_orders)[:10]}")
         woo_order_ids = woo_order_ids - refund_ids_in_orders
 
     orders_in_complyt_not_woo = sorted(complyt_order_ids - woo_order_ids, key=lambda x: int(x) if x.isdigit() else 0)
     orders_in_woo_not_complyt = sorted(woo_order_ids - complyt_order_ids, key=lambda x: int(x) if x.isdigit() else 0)
+    
+    logger.info(f"Orders in Complyt but not in WooCommerce: {len(orders_in_complyt_not_woo)}")
+    if orders_in_complyt_not_woo:
+        logger.warning(f"  Sample order IDs: {orders_in_complyt_not_woo[:20]}")
+        # For each missing order, check if it exists in WooCommerce with different formatting
+        for missing_id in orders_in_complyt_not_woo[:10]:
+            logger.warning(f"  Checking order {missing_id}:")
+            # Check if it exists in woo_data['orders'] dictionary
+            if missing_id in woo_data['orders']:
+                logger.error(f"    ERROR: Order {missing_id} EXISTS in woo_data['orders'] but was excluded from comparison!")
+                order_data = woo_data['orders'][missing_id]
+                logger.error(f"    Order data: id={order_data.get('id')}, status={order_data.get('status')}, date_created={order_data.get('date_created')}")
+            else:
+                # Check all WooCommerce orders for potential matches
+                for woo_id, woo_order in list(woo_data['orders'].items())[:100]:  # Check first 100
+                    try:
+                        if int(str(missing_id).strip()) == int(str(woo_id).strip()):
+                            logger.warning(f"    Found potential match: WooCommerce has order ID {woo_id} (numeric match with {missing_id})")
+                            logger.warning(f"      Order data: status={woo_order.get('status')}, date_created={woo_order.get('date_created')}")
+                    except ValueError:
+                        pass
+    logger.info(f"=== END ORDER COMPARISON DEBUG ===")
 
     # Debug: Log some examples of orders in WooCommerce but not in Complyt
     if orders_in_woo_not_complyt:
@@ -1161,10 +1225,11 @@ def generate_comparison_report_csvs(
         orders_complyt_not_woo_path = os.path.join(output_dir, "orders_in_complyt_not_woocommerce.csv")
         with open(orders_complyt_not_woo_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Order ID', 'Amount'])
+            writer.writerow(['Order ID', 'Amount', 'Order Date'])
             for order_id in orders_in_complyt_not_woo:
                 amount = complyt_data['invoice_amounts'].get(order_id, 0)
-                writer.writerow([order_id, amount])
+                order_date = complyt_data.get('invoice_dates', {}).get(order_id, 'N/A')
+                writer.writerow([order_id, amount, order_date])
         csv_files.append(orders_complyt_not_woo_path)
 
     # 3. Orders in WooCommerce but not in Complyt
@@ -1186,16 +1251,20 @@ def generate_comparison_report_csvs(
         refunds_complyt_not_woo_path = os.path.join(output_dir, "refunds_in_complyt_not_woocommerce.csv")
         with open(refunds_complyt_not_woo_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Refund ID', 'Type', 'Amount'])
+            writer.writerow(['Refund ID', 'Type', 'Amount', 'Parent Order ID', 'Refund Date'])
             for refund_id in refunds_in_complyt_not_woo:
                 # Determine type
                 if refund_id in complyt_data['taxable_refunds']:
                     refund_type = 'TAXABLE_REFUND'
                     amount = complyt_data['taxable_refund_amounts'].get(refund_id, 0)
+                    parent_order_id = complyt_data.get('taxable_refund_parent_order_ids', {}).get(refund_id, 'N/A')
+                    refund_date = complyt_data.get('taxable_refund_dates', {}).get(refund_id, 'N/A')
                 else:
                     refund_type = 'REFUND'
                     amount = complyt_data['refund_amounts'].get(refund_id, 0)
-                writer.writerow([refund_id, refund_type, amount])
+                    parent_order_id = complyt_data.get('refund_parent_order_ids', {}).get(refund_id, 'N/A')
+                    refund_date = complyt_data.get('refund_dates', {}).get(refund_id, 'N/A')
+                writer.writerow([refund_id, refund_type, amount, parent_order_id, refund_date])
         csv_files.append(refunds_complyt_not_woo_path)
 
     # 5. Refunds in WooCommerce but not in Complyt
