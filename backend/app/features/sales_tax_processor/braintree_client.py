@@ -78,6 +78,7 @@ class BraintreeClient:
         Returns:
             Transaction data dictionary or None if not found/error
         """
+        api_start = time.time()
         try:
             # Clean transaction_id (remove any whitespace)
             original_transaction_id = transaction_id
@@ -86,25 +87,15 @@ class BraintreeClient:
                 logger.warning(f"Empty transaction ID provided (original: {repr(original_transaction_id)})")
                 return None
 
-            logger.info(f"Fetching Braintree transaction:")
-            logger.info(f"  Transaction ID: {transaction_id} (original: {repr(original_transaction_id)})")
-
             # Use SDK to find transaction
             transaction = self.gateway.transaction.find(transaction_id)
 
             if transaction is None:
-                logger.warning(f"Transaction {transaction_id} not found")
+                logger.warning(f"Braintree transaction {transaction_id} not found")
                 return None
 
             # Convert transaction object to dictionary
             transaction_dict = self._transaction_to_dict(transaction)
-
-            logger.info(f"Transaction data retrieved successfully:")
-            logger.info(f"  Transaction ID: {transaction_dict.get('id', 'N/A')}")
-            logger.info(f"  Status: {transaction_dict.get('status', 'N/A')}")
-            logger.info(f"  Amount: {transaction_dict.get('amount', 'N/A')}")
-            logger.info(f"  Tax Amount: {transaction_dict.get('tax_amount', 'N/A')}")
-            logger.debug(f"  Full transaction: {transaction_dict}")
 
             return transaction_dict
 

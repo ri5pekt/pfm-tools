@@ -10,12 +10,12 @@ services:
         volumes:
             - db_data:/var/lib/postgresql/data
         ports:
-            - "5433:5432"
+            - "5434:5432"
 
     redis:
         image: redis:7
         ports:
-            - "6379:6379"
+            - "6380:6379"
 
     backend:
         build:
@@ -29,7 +29,7 @@ services:
             - db
             - redis
         ports:
-            - "8000:8000"
+            - "8001:8000"
         command: >
             uvicorn app.main:app
             --host 0.0.0.0

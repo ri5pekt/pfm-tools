@@ -87,32 +87,7 @@ class WooCommerceClient:
             # WooCommerce REST API uses Basic Auth (consumer_key:consumer_secret)
             url = f"{self.api_base}/orders/{order_id}"
 
-            logger.info(f"Fetching WooCommerce order:")
-            logger.info(f"  Order ID: {order_id} (original: {repr(original_order_id)})")
-            logger.info(f"  URL: {url}")
-            logger.info(f"  Method: GET")
-            logger.info(f"  Auth: Basic Auth (consumer_key:consumer_secret)")
-            logger.debug(f"  Consumer Key: {self.consumer_key[:10]}...{self.consumer_key[-4:] if len(self.consumer_key) > 14 else '***'}")
-
-            # Log request headers (without sensitive data)
-            request_headers = dict(self.session.headers)
-            if 'Authorization' in request_headers:
-                auth_header = request_headers['Authorization']
-                if auth_header.startswith('Basic '):
-                    request_headers['Authorization'] = f"Basic {auth_header[6:20]}..."  # Mask the token
-            logger.debug(f"  Request Headers: {request_headers}")
-
             response = self.session.get(url, timeout=10)
-
-            # Log the actual request that was made
-            logger.debug(f"  Request URL: {response.request.url}")
-            logger.debug(f"  Request Headers Sent: {dict(response.request.headers)}")
-
-            logger.info(f"Response received:")
-            logger.info(f"  Status Code: {response.status_code}")
-            logger.info(f"  Headers: {dict(response.headers)}")
-            if response.status_code != 200:
-                logger.warning(f"  Response Text: {response.text[:500]}")  # First 500 chars
 
             if response.status_code == 404:
                 logger.warning(f"Order {order_id} not found (404)")
@@ -121,13 +96,6 @@ class WooCommerceClient:
             response.raise_for_status()
 
             order_data = response.json()
-            logger.info(f"Order data retrieved successfully:")
-            logger.info(f"  Order ID in response: {order_data.get('id', 'N/A')}")
-            logger.info(f"  Order Number: {order_data.get('number', 'N/A')}")
-            logger.info(f"  Total: {order_data.get('total', 'N/A')}")
-            logger.info(f"  Total Tax: {order_data.get('total_tax', 'N/A')}")
-            logger.info(f"  Status: {order_data.get('status', 'N/A')}")
-            logger.debug(f"  Full response: {order_data}")
 
             return order_data
         except requests.exceptions.HTTPError as e:
@@ -234,22 +202,16 @@ class WooCommerceClient:
 
         try:
             url = f"{self.api_base}/orders"
-            # Pass include[] as list of tuples - requests will format it as include[]=id1&include[]=id2&...
-            params = [('include[]', order_id) for order_id in clean_order_ids]
-
-            logger.info(f"Fetching WooCommerce orders batch:")
-            logger.info(f"  Order IDs: {clean_order_ids}")
-            logger.info(f"  Count: {len(clean_order_ids)}")
-            logger.info(f"  URL: {url}")
-            logger.info(f"  Method: GET")
-            logger.info(f"  Auth: Basic Auth (consumer_key:consumer_secret)")
+            # WooCommerce REST API supports batch loading using 'include' parameter
+            # Can be passed as comma-separated string or list
+            # Using comma-separated string for better compatibility
+            params = {'include': ','.join(clean_order_ids)}
 
             response = self.session.get(url, params=params, timeout=30)  # Longer timeout for batch
-
-            logger.info(f"Response received:")
-            logger.info(f"  Status Code: {response.status_code}")
+            
             if response.status_code != 200:
-                logger.warning(f"  Response Text: {response.text[:500]}")
+                error_text = response.text[:500] if hasattr(response, 'text') else 'N/A'
+                logger.error(f"Batch API failed with status {response.status_code}: {error_text}")
 
             if response.status_code == 404:
                 logger.warning(f"Orders batch not found (404)")
@@ -258,7 +220,6 @@ class WooCommerceClient:
             response.raise_for_status()
 
             orders_data = response.json()
-            logger.info(f"Orders batch retrieved successfully: {len(orders_data)} orders")
 
             # Create a dictionary mapping order ID to order data
             # WooCommerce returns orders as a list, we need to index by ID
@@ -267,13 +228,11 @@ class WooCommerceClient:
                 order_id = str(order.get('id', ''))
                 if order_id:
                     result[order_id] = order
-                    logger.debug(f"  Order {order_id}: total={order.get('total')}, tax={order.get('total_tax')}")
 
             # Mark missing orders as None
             for order_id in clean_order_ids:
                 if order_id not in result:
                     result[order_id] = None
-                    logger.warning(f"  Order {order_id} not found in batch response")
 
             return result
 

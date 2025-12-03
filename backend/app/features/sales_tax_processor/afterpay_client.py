@@ -67,6 +67,7 @@ class AfterPayClient:
         Returns:
             Payment data dictionary or None if not found/error
         """
+        api_start = time.time()
         try:
             # Clean payment_id (remove any whitespace)
             original_payment_id = payment_id
@@ -78,32 +79,15 @@ class AfterPayClient:
             # AfterPay API endpoint: /v2/payments/{payment_id}
             url = f"{self.base_url}/v2/payments/{payment_id}"
 
-            logger.info(f"Fetching AfterPay payment:")
-            logger.info(f"  Payment ID: {payment_id} (original: {repr(original_payment_id)})")
-            logger.info(f"  URL: {url}")
-            logger.info(f"  Method: GET")
-            logger.info(f"  Auth: Basic Auth (username:password)")
-
             response = self.session.get(url, timeout=10)
 
-            logger.info(f"Response received:")
-            logger.info(f"  Status Code: {response.status_code}")
-            if response.status_code != 200:
-                logger.warning(f"  Response Text: {response.text[:500]}")
-
             if response.status_code == 404:
-                logger.warning(f"Payment {payment_id} not found (404)")
+                logger.warning(f"AfterPay payment {payment_id} not found (404)")
                 return None
 
             response.raise_for_status()
 
             payment_data = response.json()
-            logger.info(f"Payment data retrieved successfully:")
-            logger.info(f"  Payment ID: {payment_data.get('id', 'N/A')}")
-            logger.info(f"  Status: {payment_data.get('status', 'N/A')}")
-            logger.info(f"  Original Amount: {payment_data.get('originalAmount', {}).get('amount', 'N/A')}")
-            logger.info(f"  Tax Amount: {payment_data.get('orderDetails', {}).get('taxAmount', {}).get('amount', 'N/A')}")
-            logger.debug(f"  Full response: {payment_data}")
 
             return payment_data
 

@@ -1,6 +1,8 @@
 import csv
 import logging
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 
 from sqlalchemy.orm import Session
@@ -68,6 +70,8 @@ def process_batch(
 
     Returns the number of rows processed in this batch.
     """
+    batch_start_time = time.time()
+    
     if not row_batch:
         return 0
 
@@ -79,28 +83,44 @@ def process_batch(
             order_ids_in_batch.append(order_id)
 
     # Fetch WooCommerce orders for this batch
+    # Try batch API call first (using 'include' parameter), fall back to parallel individual calls if it fails
     order_data_cache = {}
     if woo_client and order_ids_in_batch:
-        logger.info(f"Batch {batch_num}: Fetching {len(order_ids_in_batch)} WooCommerce orders...")
         batch_results = woo_client.get_orders_batch(order_ids_in_batch)
 
-        # Check if batch fetch failed
+        # Check if batch fetch failed (all None results indicates batch API failed)
         if batch_results and len(batch_results) == len(order_ids_in_batch) and all(v is None for v in batch_results.values()):
-            logger.warning(f"Batch {batch_num}: WooCommerce batch failed. Falling back to individual calls...")
-            for order_id in order_ids_in_batch:
+            logger.warning(f"Batch {batch_num}: WooCommerce batch API failed. Falling back to parallel individual calls...")
+            
+            # Use ThreadPoolExecutor to make parallel API calls
+            # Max 5 concurrent workers to avoid overwhelming the API
+            max_workers = min(5, len(order_ids_in_batch))
+
+            def fetch_order(order_id: str) -> tuple[str, Optional[Dict[str, Any]]]:
+                """Fetch a single order and return (order_id, order_data)"""
                 try:
                     order_data = woo_client.get_order(order_id)
-                    if order_data:
-                        order_data_cache[order_id] = order_data
+                    return (order_id, order_data)
                 except Exception as e:
-                    logger.error(f"Error fetching order {order_id}: {str(e)}")
-                    order_data_cache[order_id] = None
+                    logger.error(f"Batch {batch_num}: Error fetching order {order_id}: {str(e)}")
+                    return (order_id, None)
+
+            # Execute all calls in parallel
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_order = {executor.submit(fetch_order, order_id): order_id for order_id in order_ids_in_batch}
+                for future in as_completed(future_to_order):
+                    order_id, order_data = future.result()
+                    order_data_cache[order_id] = order_data
         else:
+            # Batch API succeeded!
             order_data_cache.update(batch_results)
 
     # For each order in this batch, fetch processor data if needed
     braintree_transaction_cache = {}
     afterpay_payment_cache = {}
+
+    braintree_tasks = []
+    afterpay_tasks = []
 
     if woo_client:
         for order_id, order_data in order_data_cache.items():
@@ -109,29 +129,53 @@ def process_batch(
 
             payment_method = woo_client.get_payment_method_from_data(order_data, order_id)
 
-            # Fetch Braintree data if needed
+            # Collect Braintree tasks
             if braintree_client and payment_method and payment_method.startswith("braintree_"):
                 transaction_id = woo_client.get_transaction_id_from_data(order_data, order_id)
                 if transaction_id:
-                    try:
-                        transaction_data = braintree_client.get_transaction(transaction_id)
-                        if transaction_data:
-                            braintree_transaction_cache[transaction_id] = transaction_data
-                    except Exception as e:
-                        logger.error(f"Error fetching Braintree transaction {transaction_id}: {str(e)}")
-                        braintree_transaction_cache[transaction_id] = None
+                    braintree_tasks.append((transaction_id, order_id))
 
-            # Fetch AfterPay data if needed
+            # Collect AfterPay tasks
             elif afterpay_client and payment_method and payment_method.lower() == "afterpay":
                 payment_id = woo_client.get_transaction_id_from_data(order_data, order_id)
                 if payment_id:
-                    try:
-                        payment_data = afterpay_client.get_payment(payment_id)
-                        if payment_data:
-                            afterpay_payment_cache[payment_id] = payment_data
-                    except Exception as e:
-                        logger.error(f"Error fetching AfterPay payment {payment_id}: {str(e)}")
-                        afterpay_payment_cache[payment_id] = None
+                    afterpay_tasks.append((payment_id, order_id))
+        
+        # Fetch Braintree transactions in parallel
+        if braintree_tasks:
+            def fetch_braintree(transaction_id: str, order_id: str) -> tuple[str, Optional[Dict[str, Any]]]:
+                try:
+                    transaction_data = braintree_client.get_transaction(transaction_id)
+                    return (transaction_id, transaction_data)
+                except Exception as e:
+                    logger.error(f"Batch {batch_num}: Error fetching Braintree transaction {transaction_id}: {str(e)}")
+                    return (transaction_id, None)
+            
+            max_workers = min(5, len(braintree_tasks))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task = {executor.submit(fetch_braintree, tid, oid): (tid, oid) for tid, oid in braintree_tasks}
+                for future in as_completed(future_to_task):
+                    transaction_id, transaction_data = future.result()
+                    if transaction_data:
+                        braintree_transaction_cache[transaction_id] = transaction_data
+        
+        # Fetch AfterPay payments in parallel
+        if afterpay_tasks:
+            def fetch_afterpay(payment_id: str, order_id: str) -> tuple[str, Optional[Dict[str, Any]]]:
+                try:
+                    payment_data = afterpay_client.get_payment(payment_id)
+                    return (payment_id, payment_data)
+                except Exception as e:
+                    logger.error(f"Batch {batch_num}: Error fetching AfterPay payment {payment_id}: {str(e)}")
+                    return (payment_id, None)
+            
+            max_workers = min(5, len(afterpay_tasks))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task = {executor.submit(fetch_afterpay, pid, oid): (pid, oid) for pid, oid in afterpay_tasks}
+                for future in as_completed(future_to_task):
+                    payment_id, payment_data = future.result()
+                    if payment_data:
+                        afterpay_payment_cache[payment_id] = payment_data
 
     # Process and write rows with fetched data
     rows_written = 0
@@ -207,7 +251,8 @@ def process_batch(
         writer.writerow(row)
         rows_written += 1
 
-    logger.info(f"Batch {batch_num}: Processed {rows_written} rows")
+    batch_duration = time.time() - batch_start_time
+    logger.info(f"Batch {batch_num}: Processed {rows_written} rows in {batch_duration:.2f}s")
     return rows_written
 
 
@@ -218,6 +263,9 @@ def process_sales_tax_job(job_id: int, db_session_factory):
     - Process CSV rows and add new columns
     - Write processed CSV
     """
+    job_start_time = time.time()
+    logger.info(f"Starting Sales Tax Processor job {job_id}")
+    
     ensure_dirs()
     db = db_session_factory()
     try:
@@ -320,9 +368,10 @@ def process_sales_tax_job(job_id: int, db_session_factory):
             db.refresh(job)
             logger.info(f"Initialized progress: 0% (0/{total_rows})")
 
-        # Process in batches: fetch 10 WooCommerce orders, get processor data, process rows, repeat
+        # Process in batches: fetch WooCommerce orders, get processor data, process rows, repeat
         # This is more memory-efficient and provides better progress feedback
-        batch_size = 10
+        batch_size = 5
+        logger.info(f"Processing {total_rows} rows in batches of {batch_size}")
 
         # Process CSV file - stream processing in batches
         rows_processed = 0
@@ -442,7 +491,11 @@ def process_sales_tax_job(job_id: int, db_session_factory):
         job.status = "done"
         job.output_filename = output_path
         db.commit()
-        logger.info(f"Job {job_id} completed: {rows_processed} rows processed")
+
+        job_duration = time.time() - job_start_time
+        logger.info(f"Job {job_id} completed: Processed {rows_processed} rows in {job_duration/60:.2f} minutes")
+        if rows_processed > 0:
+            logger.info(f"Average time per row: {job_duration/rows_processed:.3f}s")
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
