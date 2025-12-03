@@ -4,7 +4,7 @@
         <header class="app-header">
             <div class="header-left">
                 <div class="logo">
-                    <i class="pi pi-sliders-h"></i>
+                    <i class="pi pi-cog"></i>
                 </div>
                 <div class="app-title-wrapper">
                     <span class="app-title">PFM Tools</span>
