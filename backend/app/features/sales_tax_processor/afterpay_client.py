@@ -2,6 +2,7 @@
 AfterPay API client for fetching payment data.
 """
 import logging
+import time
 import requests
 from typing import Optional, Dict, Any
 from requests.auth import HTTPBasicAuth
