@@ -1,7 +1,9 @@
 // frontend/src/api/http.js
 
-// Use relative path in production (proxied by nginx), or full URL in dev
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "/api" : "http://localhost:8001/api");
+// API base URL - set via VITE_API_BASE_URL at build time
+// Production: /api (proxied by nginx)
+// Development: http://localhost:8001/api
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8001/api";
 
 async function http(path, { method = "GET", body, headers = {} } = {}) {
     const token = localStorage.getItem("pfm_token");
