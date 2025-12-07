@@ -446,45 +446,30 @@ def fetch_woocommerce_orders(
         api_base = f"{woo_client.base_url}/wp-json/pfm-tools/v1"
 
         # Format dates with SPACE (not T) - this is critical for date filtering to work
-        # IMPORTANT: The PHP plugin interprets these dates in UTC timezone (changed from America/New_York)
-        # This matches Complyt CSV timezone, so orders for "Oct 2, 2025" in Complyt match "Oct 2, 2025" in the plugin
-        # We send dates EXACTLY as provided by the user (no timezone conversion)
+        # IMPORTANT: The PHP plugin interprets these dates in America/New_York timezone to match Metorik
+        # Metorik displays orders in America/New_York timezone (EDT = UTC-4 in summer, EST = UTC-5 in winter)
+        # Example: Order 3312544 shows as "Oct 1, 2025 12:05 AM" in Metorik = "Oct 1, 2025 04:05:27 UTC" in WooCommerce
+        # The plugin converts America/New_York dates to UTC timestamps for WooCommerce filtering
+        #
+        # We send dates in America/New_York timezone format (YYYY-MM-DD HH:MM:SS)
+        # The plugin interprets these as America/New_York and converts to UTC for WooCommerce queries
         # For date_to, we use the end of the day (23:59:59) to ensure we include the entire day
-        # The WooCommerce plugin converts this to a timestamp and uses it in the date_created filter
-        # Using 23:59:59 ensures all orders created on date_to are included
-        #
-        # TIMEZONE NOTE: Complyt CSV dates are in UTC (e.g., "2025-11-01T00:00:03.000Z" = Nov 1, 2025 00:00:03 UTC)
-        # WooCommerce stores dates in UTC in the database (date_created_gmt field)
-        # The plugin interprets date_after/date_before as UTC timestamps
-        #
-        # IMPORTANT: There can be a timezone offset issue:
-        # - Orders created late on Oct 31 local time (e.g., 7pm EDT = UTC-4) = Nov 1 00:00 UTC
-        # - These orders appear in Complyt CSV as Nov 1 (UTC)
-        # - But if user selects "Oct 1-2" or "Nov 1-2", we need to account for potential timezone offsets
-        #
-        # Solution: Expand the date range by 1 day before and after to account for timezone differences
-        # This ensures we capture all orders that might appear in the Complyt CSV for the selected date range
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         # Parse the date_from and date_to strings
         date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
         date_to_dt = datetime.strptime(date_to, '%Y-%m-%d')
 
-        # Adjust for timezone offset: WooCommerce site is in America/New_York (EDT = UTC-4, EST = UTC-5)
-        # Orders created late on the previous day local time appear as early next day UTC
-        # So if user selects Oct 1-2, we need to fetch from Sept 30 late evening UTC to Oct 3 early morning UTC
-        # This accounts for orders created on Sept 30 11pm EDT (Oct 1 3am UTC) and Oct 2 11pm EDT (Oct 3 3am UTC)
-        # Using 4 hours offset to cover EDT (UTC-4) - this ensures we capture all orders
-        expanded_from_dt = date_from_dt - timedelta(hours=4)  # Start 4 hours earlier UTC
-        expanded_to_dt = date_to_dt + timedelta(days=1, hours=4)  # End 4 hours after next day UTC
-
-        after_date = expanded_from_dt.strftime('%Y-%m-%d %H:%M:%S')
-        before_date = expanded_to_dt.strftime('%Y-%m-%d %H:%M:%S')
+        # Format dates for America/New_York timezone (Metorik timezone)
+        # Start of day: 00:00:00
+        after_date = date_from_dt.strftime('%Y-%m-%d 00:00:00')
+        # End of day: 23:59:59
+        before_date = date_to_dt.strftime('%Y-%m-%d 23:59:59')
 
         logger.info(f"Fetching WooCommerce orders:")
         logger.info(f"  User selected date range: {date_from} to {date_to}")
-        logger.info(f"  Adjusted date range (UTC): {after_date} to {before_date} (adjusted for EDT timezone offset: UTC-4)")
-        logger.info(f"  This will fetch orders with date_created_gmt between {after_date} and {before_date} UTC")
+        logger.info(f"  Date range (America/New_York): {after_date} to {before_date}")
+        logger.info(f"  Plugin will convert these to UTC timestamps for WooCommerce filtering")
 
         # Verify API keys are set
         if not woo_client.consumer_key or not woo_client.consumer_secret:

@@ -23,6 +23,7 @@ HARDCODED_PRODUCTS = [
     {"title": "Particle Face Wash", "sku": "636665869647"},
     {"title": "Particle Brochure", "sku": "6003.0002"},
     {"title": "Particle Neck Cream", "sku": "860005339778"},
+    {"title": "Particle Dark Spot Hand Cream", "sku": "00860014497216"},
     {"title": "Particle Hair Vitamin Gummy", "sku": "860005339761"},
     {"title": "Particle Scar Gel", "sku": "860005339716"},
     {"title": "Particle Gravite Cologne", "sku": "860005339785"},
