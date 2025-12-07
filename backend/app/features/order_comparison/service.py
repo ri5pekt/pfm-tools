@@ -484,8 +484,6 @@ def fetch_woocommerce_orders(
             'page': 1,
         }
 
-        # Debug: Log the exact date range being sent
-        logger.debug(f"Date range being sent to WooCommerce API: date_after={after_date}, date_before={before_date}")
 
         # Add filtering parameters
         if usa_only:
@@ -615,70 +613,7 @@ def fetch_woocommerce_orders(
         total_fetch_duration = fetch_end_time - fetch_start_time
         logger.info(f"Fetched {len(all_orders)} orders in {total_fetch_duration:.3f} seconds ({page_num} pages)")
 
-        # Debug: Check if target orders are in the fetched results before filtering
-        target_order_ids = ['3314180', '3314341', '3314942']
         fetched_order_ids = [str(o.get('id')) for o in all_orders]
-        for target_id in target_order_ids:
-            if target_id in fetched_order_ids:
-                order = next((o for o in all_orders if str(o.get('id')) == target_id), None)
-                if order:
-                    logger.info(f"DEBUG: Order {target_id} found in API response: date_created={order.get('date_created')}, shipping_country={order.get('shipping_country')}, shipping_state={order.get('shipping_state')}")
-            else:
-                logger.warning(f"DEBUG: Order {target_id} NOT found in API response (before filtering)")
-                # Try to query this specific order directly using WooCommerce REST API to check its status and dates
-                try:
-                    # Use standard WooCommerce REST API to query by order ID
-                    wc_order_url = f"{woo_client.base_url}/wp-json/wc/v3/orders/{target_id}"
-                    wc_response = custom_session.get(wc_order_url, timeout=30)
-                    if wc_response.status_code == 200:
-                        wc_order = wc_response.json()
-                        logger.warning(f"DEBUG: Order {target_id} EXISTS in WooCommerce (queried by ID)")
-                        logger.warning(f"  Order status: {wc_order.get('status')}")
-                        logger.warning(f"  Order dates: date_created={wc_order.get('date_created')}, date_paid={wc_order.get('date_paid')}")
-                        logger.warning(f"  Requested date range: {after_date} to {before_date}")
-                        logger.warning(f"  Shipping: country={wc_order.get('shipping', {}).get('country', 'N/A')}, state={wc_order.get('shipping', {}).get('state', 'N/A')}")
-                        logger.warning(f"  Billing: country={wc_order.get('billing', {}).get('country', 'N/A')}, state={wc_order.get('billing', {}).get('state', 'N/A')}")
-                        # Check if status is in the allowed list
-                        allowed_statuses = ['processing', 'completed', 'refunded', 'on-hold']
-                        if wc_order.get('status') not in allowed_statuses:
-                            logger.warning(f"  WARNING: Order status '{wc_order.get('status')}' is NOT in allowed list: {allowed_statuses}")
-                        # Check if order's date_created is within the requested range
-                        try:
-                            order_date_created = wc_order.get('date_created')
-                            if order_date_created:
-                                # Parse the order's date_created (WooCommerce returns ISO format like "2025-10-02T04:53:43")
-                                # Try parsing as ISO format
-                                if 'T' in order_date_created:
-                                    order_dt_str = order_date_created.split('.')[0]  # Remove milliseconds if present
-                                    order_dt = datetime.strptime(order_dt_str, '%Y-%m-%dT%H:%M:%S')
-                                else:
-                                    order_dt = datetime.strptime(order_date_created, '%Y-%m-%d %H:%M:%S')
-                                # Assume UTC (WooCommerce stores dates in UTC)
-                                order_dt_utc = pytz.UTC.localize(order_dt)
-
-                                # Parse the requested date range (plugin now uses UTC timezone)
-                                utc_tz = pytz.UTC
-                                after_dt = datetime.strptime(after_date, '%Y-%m-%d %H:%M:%S')
-                                after_utc = utc_tz.localize(after_dt)
-
-                                before_dt = datetime.strptime(before_date, '%Y-%m-%d %H:%M:%S')
-                                before_utc = utc_tz.localize(before_dt)
-
-                                within_range = after_utc <= order_dt_utc <= before_utc
-                                logger.warning(f"  Date range check:")
-                                logger.warning(f"    Order date_created (UTC): {order_dt_utc.isoformat()}")
-                                logger.warning(f"    Requested range (UTC): {after_utc.isoformat()} to {before_utc.isoformat()}")
-                                logger.warning(f"    Order is within range: {within_range}")
-                                if not within_range:
-                                    logger.warning(f"    ISSUE: Order should be included but date filter excluded it!")
-                        except Exception as e:
-                            logger.warning(f"  Error checking date range: {str(e)}")
-                    elif wc_response.status_code == 404:
-                        logger.warning(f"DEBUG: Order {target_id} does NOT exist in WooCommerce (404)")
-                    else:
-                        logger.warning(f"DEBUG: Failed to query order {target_id}: status={wc_response.status_code}, response={wc_response.text[:200]}")
-                except Exception as e:
-                    logger.warning(f"DEBUG: Exception querying order {target_id} directly: {str(e)}")
 
         # Apply filtering after fetching all orders
         logger.info(f"Applying filters: usa_only={usa_only}, exclude_states={exclude_states}")
@@ -723,13 +658,6 @@ def fetch_woocommerce_orders(
 
             all_orders = filtered_orders
 
-            # Debug: Check if target orders were filtered out
-            filtered_order_ids = [str(o.get('id')) for o in all_orders]
-            for target_id in target_order_ids:
-                if target_id in fetched_order_ids and target_id not in filtered_order_ids:
-                    logger.warning(f"DEBUG: Order {target_id} was FILTERED OUT by country/state filters")
-                elif target_id in filtered_order_ids:
-                    logger.info(f"DEBUG: Order {target_id} passed all filters and is in final results")
 
             logger.info(f"Filtered orders: {original_count} -> {len(all_orders)} (removed {original_count - len(all_orders)})")
             if usa_only:
@@ -796,7 +724,6 @@ def fetch_woocommerce_orders(
             refunds = order.get('refunds', [])
             has_refunds_flag = order.get('has_refunds', False)
 
-            # Debug: Log if has_refunds is True but refunds array is missing/empty
             if has_refunds_flag and not refunds:
                 logger.warning(f"Order {order_id} has has_refunds=True but no refunds in response - plugin may need update")
 
@@ -1283,28 +1210,8 @@ def generate_comparison_report_csvs(
     complyt_refund_ids = set(str(oid).strip() for oid in complyt_data['taxable_refunds'] + complyt_data['refunds'])
     woo_refund_ids = set(str(oid).strip() for oid in woo_data['refunds'].keys())
 
-    # Detailed logging for debugging order comparison issues
-    logger.info(f"=== ORDER COMPARISON DEBUG ===")
-    logger.info(f"Complyt order IDs count: {len(complyt_order_ids)}")
-    logger.info(f"WooCommerce order IDs count: {len(woo_order_ids)}")
-    logger.info(f"Sample Complyt order IDs (first 10): {sorted(list(complyt_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:10]}")
-    logger.info(f"Sample WooCommerce order IDs (first 10): {sorted(list(woo_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:10]}")
-
-    # Check for specific orders that are in the CSV but might be missing
-    test_order_ids = ['3364755', '3364760', '3364762', '3364763', '3364765']
-    logger.info(f"\nChecking specific test orders:")
-    for test_id in test_order_ids:
-        in_complyt = test_id in complyt_order_ids
-        in_woo = test_id in woo_order_ids
-        in_woo_data = test_id in woo_data['orders']
-        logger.info(f"  Order {test_id}:")
-        logger.info(f"    In Complyt: {in_complyt}")
-        logger.info(f"    In WooCommerce IDs set: {in_woo}")
-        logger.info(f"    In WooCommerce data dict: {in_woo_data}")
-        if in_woo_data:
-            order = woo_data['orders'][test_id]
-            logger.info(f"    Order date_created: {order.get('date_created')}")
-            logger.info(f"    Order status: {order.get('status')}")
+    # Log summary statistics
+    logger.info(f"Order comparison: Complyt={len(complyt_order_ids)}, WooCommerce={len(woo_order_ids)}")
 
     # Check for ID format mismatches
     sample_complyt_ids = sorted(list(complyt_order_ids), key=lambda x: int(x) if x.isdigit() else 0)[:5]
@@ -1364,9 +1271,7 @@ def generate_comparison_report_csvs(
                             logger.warning(f"      Order data: status={woo_order.get('status')}, date_created={woo_order.get('date_created')}")
                     except ValueError:
                         pass
-    logger.info(f"=== END ORDER COMPARISON DEBUG ===")
-
-    # Debug: Log some examples of orders in WooCommerce but not in Complyt
+    # Log some examples of orders in WooCommerce but not in Complyt
     if orders_in_woo_not_complyt:
         sample_missing = orders_in_woo_not_complyt[:10]
         logger.warning(f"Found {len(orders_in_woo_not_complyt)} orders in WooCommerce but not in Complyt invoices")
