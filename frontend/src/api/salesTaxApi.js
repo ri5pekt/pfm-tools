@@ -1,5 +1,5 @@
 // frontend/src/api/salesTaxApi.js
-import { http } from "./http";
+import { http, API_BASE_URL } from "./http";
 
 export function uploadCsv(file, orderIdHeader, options) {
     const formData = new FormData();
@@ -29,7 +29,6 @@ export function getJob(jobId) {
 }
 
 export function downloadJob(jobId) {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8001/api";
     const token = localStorage.getItem("pfm_token");
 
     return fetch(`${API_BASE_URL}/app/sales-tax-processor/job/${jobId}/download`, {

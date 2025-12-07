@@ -1,4 +1,4 @@
-import { http } from "./http";
+import { http, API_BASE_URL } from "./http";
 
 export async function createExport(date, isManual = true, dateDisplay = null, exportToFile = true, exportToGoogleSheets = true) {
     const body = {
@@ -28,7 +28,6 @@ export async function getJob(jobId) {
 }
 
 export async function downloadJob(jobId) {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
     const token = localStorage.getItem("pfm_token");
 
     return fetch(`${API_BASE_URL}/app/daily-orders-data/jobs/${jobId}/download`, {
