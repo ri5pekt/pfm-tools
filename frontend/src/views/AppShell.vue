@@ -91,6 +91,14 @@
                         <i class="pi pi-calendar"></i>
                         <span>Daily Orders Data</span>
                     </RouterLink>
+                    <RouterLink
+                        to="/app/daily-product-sales"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-shopping-cart"></i>
+                        <span>Daily Product Sales</span>
+                    </RouterLink>
                 </nav>
             </aside>
 

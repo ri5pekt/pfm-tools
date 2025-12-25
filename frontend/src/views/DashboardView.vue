@@ -7,126 +7,145 @@
         <div class="dashboard-content">
             <div class="dashboard-header">
                 <h1 class="dashboard-title">Welcome back!</h1>
-                <p class="dashboard-subtitle">
-                    Select a service to get started.
-                </p>
+                <p class="dashboard-subtitle">Select a service to get started.</p>
             </div>
 
-        <div class="dashboard-sections">
-            <!-- Sales Tax Service -->
-            <Card class="section-card" @click="$router.push({ name: 'sales-tax-processor' })">
-                <template #content>
-                    <div class="section-card-content">
-                        <div class="section-icon-wrapper">
-                            <i class="pi pi-file-export section-icon"></i>
+            <div class="dashboard-sections">
+                <!-- Sales Tax Service -->
+                <Card class="section-card" @click="$router.push({ name: 'sales-tax-processor' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-file-export section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">Sales Tax</h2>
+                            <p class="section-card-description">
+                                Process sales tax data from CSV files with integration to WooCommerce, Braintree, and
+                                AfterShip.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                        <h2 class="section-card-title">Sales Tax</h2>
-                        <p class="section-card-description">
-                            Process sales tax data from CSV files with integration to WooCommerce, Braintree, and AfterShip.
-                        </p>
-                        <div class="section-card-footer">
-                            <span class="section-card-link">Open Service</span>
-                            <i class="pi pi-arrow-right"></i>
-                        </div>
-                    </div>
-                </template>
-            </Card>
+                    </template>
+                </Card>
 
-            <!-- Order Comparison Service -->
-            <Card class="section-card" @click="$router.push({ name: 'order-comparison' })">
-                <template #content>
-                    <div class="section-card-content">
-                        <div class="section-icon-wrapper">
-                            <i class="pi pi-sync section-icon"></i>
+                <!-- Order Comparison Service -->
+                <Card class="section-card" @click="$router.push({ name: 'order-comparison' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-sync section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">Order Comparison</h2>
+                            <p class="section-card-description">
+                                Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed PDF
+                                reports.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                        <h2 class="section-card-title">Order Comparison</h2>
-                        <p class="section-card-description">
-                            Compare Complyt CSV data with WooCommerce orders and refunds, generating detailed PDF reports.
-                        </p>
-                        <div class="section-card-footer">
-                            <span class="section-card-link">Open Service</span>
-                            <i class="pi pi-arrow-right"></i>
-                        </div>
-                    </div>
-                </template>
-            </Card>
+                    </template>
+                </Card>
 
-            <!-- Ulta Marketplace Service -->
-            <Card class="section-card" @click="$router.push({ name: 'ulta-marketplace' })">
-                <template #content>
-                    <div class="section-card-content">
-                        <div class="section-icon-wrapper ulta-logo-wrapper">
-                            <img src="@/assets/images/logo-ulta.svg" alt="Ulta" class="ulta-logo" />
+                <!-- Ulta Marketplace Service -->
+                <Card class="section-card" @click="$router.push({ name: 'ulta-marketplace' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper ulta-logo-wrapper">
+                                <img src="@/assets/images/logo-ulta.svg" alt="Ulta" class="ulta-logo" />
+                            </div>
+                            <h2 class="section-card-title">Ulta Marketplace</h2>
+                            <p class="section-card-description">Manage and process Ulta marketplace orders and data.</p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                        <h2 class="section-card-title">Ulta Marketplace</h2>
-                        <p class="section-card-description">
-                            Manage and process Ulta marketplace orders and data.
-                        </p>
-                        <div class="section-card-footer">
-                            <span class="section-card-link">Open Service</span>
-                            <i class="pi pi-arrow-right"></i>
-                        </div>
-                    </div>
-                </template>
-            </Card>
+                    </template>
+                </Card>
 
-            <!-- TikTok Marketplace Service -->
-            <Card class="section-card" @click="$router.push({ name: 'tiktok-marketplace' })">
-                <template #content>
-                    <div class="section-card-content">
-                        <div class="section-icon-wrapper">
-                            <i class="pi pi-video section-icon"></i>
+                <!-- TikTok Marketplace Service -->
+                <Card class="section-card" @click="$router.push({ name: 'tiktok-marketplace' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-video section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">TikTok Marketplace</h2>
+                            <p class="section-card-description">
+                                Export TikTok marketplace orders to CSV and Google Sheets with date range selection and
+                                scheduled exports.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                        <h2 class="section-card-title">TikTok Marketplace</h2>
-                        <p class="section-card-description">
-                            Export TikTok marketplace orders to CSV and Google Sheets with date range selection and scheduled exports.
-                        </p>
-                        <div class="section-card-footer">
-                            <span class="section-card-link">Open Service</span>
-                            <i class="pi pi-arrow-right"></i>
-                        </div>
-                    </div>
-                </template>
-            </Card>
+                    </template>
+                </Card>
 
-            <!-- Inventory Data Service -->
-            <Card class="section-card" @click="$router.push({ name: 'inventory-data' })">
-                <template #content>
-                    <div class="section-card-content">
-                        <div class="section-icon-wrapper">
-                            <i class="pi pi-box section-icon"></i>
+                <!-- Inventory Data Service -->
+                <Card class="section-card" @click="$router.push({ name: 'inventory-data' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-box section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">Inventory Data</h2>
+                            <p class="section-card-description">
+                                Export inventory data from multiple APIs to CSV and Google Sheets.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                        <h2 class="section-card-title">Inventory Data</h2>
-                        <p class="section-card-description">
-                            Export inventory data from multiple APIs to CSV and Google Sheets.
-                        </p>
-                        <div class="section-card-footer">
-                            <span class="section-card-link">Open Service</span>
-                            <i class="pi pi-arrow-right"></i>
-                        </div>
-                    </div>
-                </template>
-            </Card>
+                    </template>
+                </Card>
 
-            <!-- Daily Orders Data Service -->
-            <Card class="section-card" @click="$router.push({ name: 'daily-orders-data' })">
-                <template #content>
-                    <div class="section-card-content">
-                        <div class="section-icon-wrapper">
-                            <i class="pi pi-calendar section-icon"></i>
+                <!-- Daily Orders Data Service -->
+                <Card class="section-card" @click="$router.push({ name: 'daily-orders-data' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-calendar section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">Daily Orders Data</h2>
+                            <p class="section-card-description">
+                                Export WooCommerce daily orders data to CSV and Google Sheets with scheduled exports.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                        <h2 class="section-card-title">Daily Orders Data</h2>
-                        <p class="section-card-description">
-                            Export WooCommerce daily orders data to CSV and Google Sheets with scheduled exports.
-                        </p>
-                        <div class="section-card-footer">
-                            <span class="section-card-link">Open Service</span>
-                            <i class="pi pi-arrow-right"></i>
+                    </template>
+                </Card>
+
+                <!-- Daily Product Sales Service -->
+                <Card class="section-card" @click="$router.push({ name: 'daily-product-sales' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-shopping-cart section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">Daily Product Sales</h2>
+                            <p class="section-card-description">
+                                Export WooCommerce daily product sales data to CSV and Google Sheets with scheduled
+                                exports.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
                         </div>
-                    </div>
-                </template>
-            </Card>
-        </div>
+                    </template>
+                </Card>
+            </div>
         </div>
     </div>
 </template>

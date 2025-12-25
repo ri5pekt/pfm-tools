@@ -20,6 +20,12 @@ except Exception as e:
     logging.error(f"Failed to import daily_orders_data router: {e}", exc_info=True)
     daily_orders_data_router = None
 
+try:
+    from app.features.daily_product_sales.routes import router as daily_product_sales_router
+except Exception as e:
+    logging.error(f"Failed to import daily_product_sales router: {e}", exc_info=True)
+    daily_product_sales_router = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -129,6 +135,12 @@ if daily_orders_data_router:
     app.include_router(daily_orders_data_router)
 else:
     logging.error("Daily Orders Data router is None - not including routes")
+
+# Daily Product Sales → available at /api/app/daily-product-sales/* (prefix already defined in router)
+if daily_product_sales_router:
+    app.include_router(daily_product_sales_router)
+else:
+    logging.error("Daily Product Sales router is None - not including routes")
 
 # Other modules later:
 # app.include_router(taxes_router, prefix="/api/taxes")

@@ -10,6 +10,7 @@ import UltaMarketplaceView from "../views/UltaMarketplaceView.vue";
 import TikTokMarketplaceView from "../views/TikTokMarketplaceView.vue";
 import InventoryDataView from "../views/InventoryDataView.vue";
 import DailyOrdersDataView from "../views/DailyOrdersDataView.vue";
+import DailyProductSalesView from "../views/DailyProductSalesView.vue";
 
 const routes = [
     {
@@ -55,6 +56,11 @@ const routes = [
                 path: "daily-orders-data",
                 name: "daily-orders-data",
                 component: DailyOrdersDataView,
+            },
+            {
+                path: "daily-product-sales",
+                name: "daily-product-sales",
+                component: DailyProductSalesView,
             },
             {
                 path: "",

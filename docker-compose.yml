@@ -78,13 +78,13 @@ services:
         command: >
             sh -c "python scheduler.py && exec rqscheduler --url $${REDIS_URL} --interval 1 --verbose"
 
-    # Frontend (optional - you can also run 'npm run dev' in frontend/ directory)
-    # Uncomment to use Docker container instead of dev server
+    # Frontend - run locally with 'npm run dev' in frontend/ directory for hot reload
+    # Uncomment below to use Docker container instead (production build, no hot reload)
     # frontend:
     #     build:
     #         context: ./frontend
     #         args:
-    #             VITE_API_BASE_URL: http://localhost:8000/api
+    #             VITE_API_BASE_URL: /api
     #     ports:
     #         - "5173:80"
     #     depends_on:

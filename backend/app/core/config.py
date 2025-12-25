@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     inventory_google_sheets_spreadsheet_id: Optional[str] = None  # Inventory Data Google Sheets spreadsheet ID
     # Daily Orders Data specific spreadsheet ID
     daily_orders_google_sheets_spreadsheet_id: Optional[str] = None  # Daily Orders Data Google Sheets spreadsheet ID
+    # Daily Product Sales specific spreadsheet ID
+    daily_product_sales_google_sheets_spreadsheet_id: Optional[str] = None  # Daily Product Sales Google Sheets spreadsheet ID
     # TikTok Marketplace specific spreadsheet ID
     tiktok_google_sheets_spreadsheet_id: Optional[str] = None  # TikTok Marketplace Google Sheets spreadsheet ID
     tiktok_google_sheets_sheet_name: Optional[str] = "TikTok Exports"  # TikTok Marketplace Google Sheets sheet name
