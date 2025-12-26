@@ -1,6 +1,6 @@
 # PFM Tools
 
-**Version:** 1.6.0
+**Version:** 1.6.1
 
 A modern web application for processing sales tax data, managing inventory, and exporting marketplace data with integration to WooCommerce, Braintree, AfterShip, Ulta Marketplace, Zenventory, ShipBob, and Google Sheets.
 

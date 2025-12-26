@@ -577,6 +577,15 @@ def export_single_day_to_google_sheets(
         # Get existing data
         existing_data = worksheet.get_all_values()
 
+        # Helper function to normalize SKU strings for consistent matching
+        # SKU is the source of truth - normalize to ensure consistent matching
+        def _normalize_sku(sku: Any) -> str:
+            """Normalize SKU string for consistent matching. SKU is the source of truth."""
+            if sku is None:
+                return ''
+            # Convert to string, strip whitespace, remove leading apostrophe (used to force text format in sheets)
+            return str(sku).strip().lstrip("'").strip()
+
         # Parse existing structure
         existing_skus = []
         existing_sku_product_names = {}
@@ -599,15 +608,14 @@ def export_single_day_to_google_sheets(
             return False
 
         if len(existing_data) >= 2:
-            # Row 1: SKUs
+            # Row 1: SKUs - extract and normalize using SKU as source of truth
             if len(existing_data[0]) > 1:
                 row1 = existing_data[0]
                 for col_idx in range(1, len(row1), 3):
                     sku = row1[col_idx]
-                    if sku:
-                        sku_str = str(sku).strip().lstrip("'")
-                        if sku_str:
-                            existing_skus.append(sku_str)
+                    sku_str = _normalize_sku(sku)
+                    if sku_str:
+                        existing_skus.append(sku_str)
 
             # Row 2: Headers - extract product names
             if len(existing_data) >= 2 and len(existing_data[1]) > 1:
@@ -628,16 +636,29 @@ def export_single_day_to_google_sheets(
                     existing_dates.add(date_str_existing)
                     date_row_map[date_str_existing] = row_idx + 1
 
-        # Collect SKUs from new day data
-        new_sku_info = {}
+        # Collect SKUs from new day data - normalize SKUs for consistent matching
+        # SKU is the source of truth, not product titles
+        # Create normalized lookup for day_data (keys may not be normalized)
+        normalized_day_data = {}
         for sku, sales_data in day_data.items():
-            sku_str = str(sku)
-            if sku_str not in new_sku_info:
-                new_sku_info[sku_str] = sales_data.get('product_name', sku_str)
+            sku_normalized = _normalize_sku(sku)
+            if sku_normalized:
+                normalized_day_data[sku_normalized] = sales_data
+
+        new_sku_info = {}
+        for sku, sales_data in normalized_day_data.items():
+            if sku not in new_sku_info:
+                new_sku_info[sku] = sales_data.get('product_name', sku)
 
         # Determine all SKUs (existing + new)
-        all_skus = list(set([str(s) for s in existing_skus] + list(new_sku_info.keys())))
-        all_skus.sort()
+        # IMPORTANT: Preserve existing column order, then append new SKUs at the end
+        # This prevents data misalignment when new SKUs are added
+        # SKU matching is done by normalized SKU string (SKU is source of truth, not product titles)
+        existing_skus_set = set(existing_skus)  # Already normalized
+        new_skus_list = [sku for sku in new_sku_info.keys() if sku not in existing_skus_set]
+        new_skus_list.sort()  # Sort only new SKUs for consistent order
+        # Preserve existing order, then append new SKUs
+        all_skus = existing_skus + new_skus_list
 
         # Merge product names.
         # Prefer existing names unless they look like placeholders; in that case, use the new name.
@@ -706,25 +727,68 @@ def export_single_day_to_google_sheets(
         # Format date for Google Sheets (MM/DD/YYYY)
         date_formatted = datetime.strptime(date_str, '%Y-%m-%d').strftime('%m/%d/%Y')
 
-        # Build row data for this day
-        row_data = [date_formatted]
-        for sku in all_skus:
-            sales_data = day_data.get(sku, {})
-            gross_sales = round(sales_data.get('gross_sales', 0), 2)
-            orders_count = sales_data.get('orders_count', 0)
-            items = sales_data.get('items', 0)
-            row_data.append(gross_sales)
-            row_data.append(orders_count)
-            row_data.append(items)
-
         # Update or append row
         if date_formatted in existing_dates:
-            # Update existing row
+            # Update existing row - only update columns for SKUs that have data for this day
+            # This preserves existing values for SKUs that don't have data for this day
             row_idx = date_row_map[date_formatted]
-            worksheet.update(f'A{row_idx}', [row_data])
-            logger.info(f"Updated row for date {date_formatted}")
+            existing_row = existing_data[row_idx - 1] if row_idx - 1 < len(existing_data) else []
+
+            # Build updated row by preserving existing values and only updating SKUs with new data
+            updated_row = [date_formatted]  # Date column (always update)
+
+            # Ensure existing_row has enough columns (pad with empty strings if needed)
+            while len(existing_row) < len(all_skus) * 3 + 1:
+                existing_row.append('')
+
+            for sku_idx, sku in enumerate(all_skus):
+                col_start = 1 + (sku_idx * 3)  # Starting column index for this SKU (0-indexed from row data)
+
+                if sku in normalized_day_data:
+                    # This SKU has data for today - use new values
+                    sales_data = normalized_day_data[sku]
+                    updated_row.append(round(sales_data.get('gross_sales', 0), 2))
+                    updated_row.append(sales_data.get('orders_count', 0))
+                    updated_row.append(sales_data.get('items', 0))
+                else:
+                    # This SKU doesn't have data for today - preserve existing values
+                    # Get existing values from the row (accounting for Date column at index 0)
+                    # Handle empty strings and convert to numbers if needed
+                    def _get_numeric_value(val, default=0):
+                        """Convert value to number, handling empty strings and None."""
+                        if val is None or val == '' or val == '""':
+                            return default
+                        try:
+                            return float(val) if '.' in str(val) else int(float(val))
+                        except (ValueError, TypeError):
+                            return default
+
+                    if col_start < len(existing_row):
+                        # Preserve existing gross_sales, orders_count, items
+                        updated_row.append(_get_numeric_value(existing_row[col_start], 0))
+                        updated_row.append(_get_numeric_value(existing_row[col_start + 1] if col_start + 1 < len(existing_row) else '', 0))
+                        updated_row.append(_get_numeric_value(existing_row[col_start + 2] if col_start + 2 < len(existing_row) else '', 0))
+                    else:
+                        # New SKU column that didn't exist before - use 0
+                        updated_row.append(0)
+                        updated_row.append(0)
+                        updated_row.append(0)
+
+            # Update the row
+            worksheet.update(f'A{row_idx}', [updated_row])
+            logger.info(f"Updated row for date {date_formatted} (preserved existing values for SKUs without data)")
         else:
-            # Append new row
+            # Append new row - build complete row with 0s for SKUs without data
+            row_data = [date_formatted]
+            for sku in all_skus:
+                sales_data = normalized_day_data.get(sku, {})
+                gross_sales = round(sales_data.get('gross_sales', 0), 2)
+                orders_count = sales_data.get('orders_count', 0)
+                items = sales_data.get('items', 0)
+                row_data.append(gross_sales)
+                row_data.append(orders_count)
+                row_data.append(items)
+
             worksheet.append_row(row_data)
             logger.info(f"Appended new row for date {date_formatted}")
 
