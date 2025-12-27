@@ -121,12 +121,17 @@ def run_daily_product_sales_export_job(job_id: int):
         date_from_dt_utc = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
         date_to_dt_utc = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
 
+        # Convert to NY timezone first, then extract date components
+        # This ensures we get the correct calendar day in NY timezone
+        date_from_dt_ny = date_from_dt_utc.astimezone(metorik_tz)
+        date_to_dt_ny = date_to_dt_utc.astimezone(metorik_tz)
+
         date_from_dt = datetime(
-            date_from_dt_utc.year, date_from_dt_utc.month, date_from_dt_utc.day,
+            date_from_dt_ny.year, date_from_dt_ny.month, date_from_dt_ny.day,
             0, 0, 0, tzinfo=metorik_tz
         )
         date_to_dt = datetime(
-            date_to_dt_utc.year, date_to_dt_utc.month, date_to_dt_utc.day,
+            date_to_dt_ny.year, date_to_dt_ny.month, date_to_dt_ny.day,
             23, 59, 59, tzinfo=metorik_tz
         )
 
