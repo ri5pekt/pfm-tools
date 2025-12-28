@@ -228,8 +228,8 @@ def save_daily_product_sales_to_csv(
 ) -> str:
     """
     Save product sales data to CSV file in the required format:
-    - Row 1: SKUs (Column A empty, then SKU values)
-    - Row 2: Headers (Column A: "Date", then for each product: "Product Name - Gross Sales", "Product Name - Orders", "Product Name - Items")
+    - Row 1: Headers (Column A: "Date", then for each product: "Product Name - Gross Sales", "Product Name - Orders", "Product Name - Items")
+    - Row 2: SKUs (Column A empty, then SKU values)
     - Row 3+: Data rows (Column A: date, then values for each product's 3 columns)
 
     Args:
@@ -248,8 +248,8 @@ def save_daily_product_sales_to_csv(
         # Create empty CSV with minimal structure
         with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
-            writer.writerow([''])  # Row 1: Empty SKU row
-            writer.writerow(['Date'])  # Row 2: Header row with just Date
+            writer.writerow(['Date'])  # Row 1: Header row with just Date
+            writer.writerow([''])  # Row 2: Empty SKU row
             writer.writerow(['No product sales found for the selected date range'])
         logger.info(f"Created empty CSV file: {output_path}")
         return output_path
@@ -281,8 +281,17 @@ def save_daily_product_sales_to_csv(
     with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
 
-        # Row 1: SKUs (Column A empty, then SKU values)
-        # Each product has 3 columns in row 2 (Gross Sales, Orders, Items)
+        # Row 1: Headers (Column A: "Date", then for each product: "Product Name - Gross Sales", "Product Name - Orders", "Product Name - Items")
+        header_row = ['Date']
+        for sku in sorted_skus:
+            product_name = sku_info[sku]
+            header_row.append(f'{product_name} - Gross Sales')
+            header_row.append(f'{product_name} - Orders')
+            header_row.append(f'{product_name} - Items')
+        writer.writerow(header_row)
+
+        # Row 2: SKUs (Column A empty, then SKU values)
+        # Each product has 3 columns in row 1 (Gross Sales, Orders, Items)
         # SKUs align with the first column of each product group (Gross Sales column)
         # Format: ['', SKU1, '', '', SKU2, '', '', SKU3, '', '', ...]
         # This means: SKU in first column of product, then 2 empty cells, then next SKU
@@ -293,18 +302,9 @@ def save_daily_product_sales_to_csv(
             # This prevents numeric SKUs from being converted to numbers (same approach as Inventory Data)
             sku_str = f"'{str(sku)}"
             sku_row.append(sku_str)  # SKU aligns with Gross Sales column
-            sku_row.append('')    # Empty (for Orders column in row 2)
-            sku_row.append('')    # Empty (for Items column in row 2)
+            sku_row.append('')    # Empty (for Orders column in row 1)
+            sku_row.append('')    # Empty (for Items column in row 1)
         writer.writerow(sku_row)
-
-        # Row 2: Headers (Column A: "Date", then for each product: "Product Name - Gross Sales", "Product Name - Orders", "Product Name - Items")
-        header_row = ['Date']
-        for sku in sorted_skus:
-            product_name = sku_info[sku]
-            header_row.append(f'{product_name} - Gross Sales')
-            header_row.append(f'{product_name} - Orders')
-            header_row.append(f'{product_name} - Items')
-        writer.writerow(header_row)
 
         # Row 3+: Data rows (sorted by date)
         sorted_dates = sorted(product_sales.keys())
@@ -608,25 +608,27 @@ def export_single_day_to_google_sheets(
             return False
 
         if len(existing_data) >= 2:
-            # Row 1: SKUs - extract and normalize using SKU as source of truth
+            # Row 1: Headers - extract product names
+            headers = []
             if len(existing_data[0]) > 1:
-                row1 = existing_data[0]
-                for col_idx in range(1, len(row1), 3):
-                    sku = row1[col_idx]
+                headers = existing_data[0][1:]  # Skip first column (Date)
+
+            # Row 2: SKUs - extract and normalize using SKU as source of truth
+            if len(existing_data) >= 2 and len(existing_data[1]) > 1:
+                row2 = existing_data[1]
+                for col_idx in range(1, len(row2), 3):
+                    sku = row2[col_idx]
                     sku_str = _normalize_sku(sku)
                     if sku_str:
                         existing_skus.append(sku_str)
-
-            # Row 2: Headers - extract product names
-            if len(existing_data) >= 2 and len(existing_data[1]) > 1:
-                headers = existing_data[1][1:]
-                for sku_idx, sku in enumerate(existing_skus):
-                    header_idx = sku_idx * 3
-                    if header_idx < len(headers):
-                        header = headers[header_idx]
-                        if header and " - Gross Sales" in header:
-                            product_name = header.replace(" - Gross Sales", "").strip()
-                            existing_sku_product_names[sku] = product_name
+                        # Map product name from row 1 to this SKU
+                        sku_idx = len(existing_skus) - 1
+                        header_idx = sku_idx * 3
+                        if header_idx < len(headers):
+                            header = headers[header_idx]
+                            if header and " - Gross Sales" in header:
+                                product_name = header.replace(" - Gross Sales", "").strip()
+                                existing_sku_product_names[sku_str] = product_name
 
             # Row 3+: Data rows
             for row_idx in range(2, len(existing_data)):
@@ -684,23 +686,10 @@ def export_single_day_to_google_sheets(
                 header_needs_update = True
                 break
 
-        if new_skus or header_needs_update:
-            logger.info(f"Adding {len(new_skus)} new SKUs for date {date_str}")
-
-            # Update Row 1: SKUs
-            sku_row = ['']
-            for sku in all_skus:
-                sku_str = f"'{str(sku)}"
-                sku_row.append(sku_str)
-                sku_row.append('')
-                sku_row.append('')
-
-            if len(existing_data) == 0:
-                worksheet.append_row(sku_row)
-            else:
-                worksheet.update('A1', [sku_row])
-
-            # Update Row 2: Headers (ensure SKU titles match)
+        # ALWAYS rewrite rows 1 and 2 in new format (titles row 1, SKUs row 2)
+        # This ensures correct format regardless of what was there before
+        if len(all_skus) > 0:
+            # Build Row 1: Headers (product names)
             header_row = ['Date']
             for sku in all_skus:
                 product_name = all_sku_product_names.get(sku, sku)
@@ -708,10 +697,24 @@ def export_single_day_to_google_sheets(
                 header_row.append(f'{product_name} - Orders')
                 header_row.append(f'{product_name} - Items')
 
-            if len(existing_data) < 2:
-                worksheet.append_row(header_row)
+            # Build Row 2: SKUs
+            sku_row = ['']
+            for sku in all_skus:
+                sku_str = f"'{str(sku)}"
+                sku_row.append(sku_str)
+                sku_row.append('')
+                sku_row.append('')
+
+            # Always write both rows in correct order
+            if len(existing_data) == 0:
+                worksheet.append_row(header_row)  # Row 1: Titles
+                worksheet.append_row(sku_row)     # Row 2: SKUs
+            elif len(existing_data) == 1:
+                worksheet.update('A1', [header_row])  # Row 1: Titles
+                worksheet.append_row(sku_row)         # Row 2: SKUs
             else:
-                worksheet.update('A2', [header_row])
+                worksheet.update('A1', [header_row])  # Row 1: Titles
+                worksheet.update('A2', [sku_row])     # Row 2: SKUs
 
             # Re-read existing data after header updates
             existing_data = worksheet.get_all_values()
@@ -918,38 +921,36 @@ def export_product_sales_to_google_sheets(
         existing_sku_product_names = {}  # {sku: product_name} from existing headers
         existing_dates = set()
         date_row_map = {}  # {date_str: row_index}
+        header_needs_update = False  # Will be set to True if old format detected
 
         if len(existing_data) >= 2:
-            # Row 1: SKUs are in every 3rd column starting from column B (index 1)
-            # Format: '', SKU1, '', '', SKU2, '', '', SKU3, '', '', ...
+            # Row 1: Headers - extract product names
+            headers = []
             if len(existing_data[0]) > 1:
-                row1 = existing_data[0]
+                headers = existing_data[0][1:]  # Skip first column (Date)
+
+            # Row 2: SKUs are in every 3rd column starting from column B (index 1)
+            # Format: '', SKU1, '', '', SKU2, '', '', SKU3, '', '', ...
+            if len(existing_data) >= 2 and len(existing_data[1]) > 1:
+                row2 = existing_data[1]
                 # Extract SKUs from columns B, E, H, etc. (every 3rd column starting from index 1)
-                for col_idx in range(1, len(row1), 3):
-                    sku = row1[col_idx]
+                for col_idx in range(1, len(row2), 3):
+                    sku = row2[col_idx]
                     if sku:
                         # Convert to string, strip whitespace, and remove leading apostrophe if present
                         # (SKUs are stored with leading apostrophe to force text format)
                         sku_str = str(sku).strip().lstrip("'")
                         if sku_str:
                             existing_skus.append(sku_str)
-
-            # Row 2: Headers - extract product names
-            # Headers are in format: "Product Name - Gross Sales", "Product Name - Orders", "Product Name - Items"
-            # Process in groups of 3 (each SKU has 3 columns)
-            if len(existing_data) >= 2 and len(existing_data[1]) > 1:
-                headers = existing_data[1][1:]  # Skip first column (Date)
-                # Headers are in groups of 3, so we need to map them to SKUs
-                # SKUs are in row 1 at columns B, E, H, etc. (every 3rd column)
-                # Headers start at column B and are in groups of 3
-                for sku_idx, sku in enumerate(existing_skus):
-                    header_idx = sku_idx * 3
-                    if header_idx < len(headers):
-                        header = headers[header_idx]
-                        # Extract product name by removing " - Gross Sales" suffix
-                        if header and " - Gross Sales" in header:
-                            product_name = header.replace(" - Gross Sales", "").strip()
-                            existing_sku_product_names[sku] = product_name
+                            # Map product name from row 1 to this SKU
+                            sku_idx = len(existing_skus) - 1
+                            header_idx = sku_idx * 3
+                            if header_idx < len(headers):
+                                header = headers[header_idx]
+                                # Extract product name by removing " - Gross Sales" suffix
+                                if header and " - Gross Sales" in header:
+                                    product_name = header.replace(" - Gross Sales", "").strip()
+                                    existing_sku_product_names[sku_str] = product_name
 
             # Row 3+: Data rows
             for row_idx in range(2, len(existing_data)):
@@ -983,37 +984,14 @@ def export_product_sales_to_google_sheets(
             else:
                 all_sku_product_names[sku] = sku  # Fallback to SKU
 
-        # Add new SKUs as columns if needed
-        logger.info(f"Existing SKUs: {existing_skus}")
-        logger.info(f"New SKUs from data: {list(new_sku_info.keys())}")
-        logger.info(f"All SKUs (merged): {all_skus}")
-        new_skus = [sku for sku in all_skus if sku not in existing_skus]
-        logger.info(f"New SKUs to add: {new_skus}")
-        if new_skus:
-            logger.info(f"Adding {len(new_skus)} new SKUs as columns")
+        # ALWAYS rewrite rows 1 and 2 in new format (titles row 1, SKUs row 2)
+        # This ensures correct format regardless of what was there before
+        if len(all_skus) > 0:
+            logger.info(f"Writing rows 1 and 2: {len(all_skus)} products")
             if update_progress:
-                update_progress(50, f'Adding {len(new_skus)} new SKUs...')
+                update_progress(50, f'Updating headers and SKUs...')
 
-            # Update Row 1: SKUs in format: '', SKU1, '', '', SKU2, '', '', ...
-            # Ensure SKUs are written as strings (not numbers) - use leading apostrophe like Inventory Data
-            logger.info(f"Updating Row 1 with {len(all_skus)} SKUs")
-            sku_row = ['']  # Column A empty
-            for sku in all_skus:
-                # Convert SKU to string with leading apostrophe to force Google Sheets to treat it as text
-                # This prevents numeric SKUs from being converted to numbers (same approach as Inventory Data)
-                sku_str = f"'{str(sku)}"
-                sku_row.append(sku_str)  # SKU aligns with Gross Sales column
-                sku_row.append('')    # Empty (for Orders column)
-                sku_row.append('')    # Empty (for Items column)
-
-            if len(existing_data) == 0:
-                # Create new sheet
-                worksheet.append_row(sku_row)
-            else:
-                # Update existing row 1
-                worksheet.update('A1', [sku_row])
-
-            # Update Row 2: Headers
+            # Build Row 1: Headers (product names)
             header_row = ['Date']
             for sku in all_skus:
                 product_name = all_sku_product_names.get(sku, sku)
@@ -1021,10 +999,24 @@ def export_product_sales_to_google_sheets(
                 header_row.append(f'{product_name} - Orders')
                 header_row.append(f'{product_name} - Items')
 
-            if len(existing_data) < 2:
-                worksheet.append_row(header_row)
+            # Build Row 2: SKUs
+            sku_row = ['']  # Column A empty
+            for sku in all_skus:
+                sku_str = f"'{str(sku)}"
+                sku_row.append(sku_str)
+                sku_row.append('')
+                sku_row.append('')
+
+            # Always write both rows in correct order
+            if len(existing_data) == 0:
+                worksheet.append_row(header_row)  # Row 1: Titles
+                worksheet.append_row(sku_row)      # Row 2: SKUs
+            elif len(existing_data) == 1:
+                worksheet.update('A1', [header_row])  # Row 1: Titles
+                worksheet.append_row(sku_row)         # Row 2: SKUs
             else:
-                worksheet.update('A2', [header_row])
+                worksheet.update('A1', [header_row])  # Row 1: Titles
+                worksheet.update('A2', [sku_row])     # Row 2: SKUs
 
         # Add/update data rows
         logger.info(f"Preparing to add/update data for {len(product_sales)} dates")
@@ -1079,4 +1071,5 @@ def export_product_sales_to_google_sheets(
     except Exception as e:
         logger.error(f"Error exporting to Google Sheets: {str(e)}", exc_info=True)
         return False
+
 
