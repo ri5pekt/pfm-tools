@@ -118,22 +118,36 @@ def run_daily_product_sales_export_job(job_id: int):
         # Parse date range to get list of days
         from zoneinfo import ZoneInfo
         metorik_tz = ZoneInfo('America/New_York')
-        date_from_dt_utc = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
-        date_to_dt_utc = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
 
-        # Convert to NY timezone first, then extract date components
-        # This ensures we get the correct calendar day in NY timezone
-        date_from_dt_ny = date_from_dt_utc.astimezone(metorik_tz)
-        date_to_dt_ny = date_to_dt_utc.astimezone(metorik_tz)
+        # For scheduled exports, use display dates if available (they represent the actual calendar dates)
+        # This avoids timezone conversion issues when the UTC date spans midnight
+        date_from_display = options.get("date_from_display")
+        date_to_display = options.get("date_to_display")
 
-        date_from_dt = datetime(
-            date_from_dt_ny.year, date_from_dt_ny.month, date_from_dt_ny.day,
-            0, 0, 0, tzinfo=metorik_tz
-        )
-        date_to_dt = datetime(
-            date_to_dt_ny.year, date_to_dt_ny.month, date_to_dt_ny.day,
-            23, 59, 59, tzinfo=metorik_tz
-        )
+        if date_from_display and date_to_display:
+            # Use display dates directly (they're already in YYYY-MM-DD format for the calendar day)
+            date_from_dt = datetime.strptime(date_from_display, '%Y-%m-%d').replace(tzinfo=metorik_tz)
+            date_to_dt = datetime.strptime(date_to_display, '%Y-%m-%d').replace(
+                hour=23, minute=59, second=59, tzinfo=metorik_tz
+            )
+        else:
+            # Fallback to parsing UTC dates (for manual exports)
+            date_from_dt_utc = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+            date_to_dt_utc = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+
+            # Convert to NY timezone first, then extract date components
+            # This ensures we get the correct calendar day in NY timezone
+            date_from_dt_ny = date_from_dt_utc.astimezone(metorik_tz)
+            date_to_dt_ny = date_to_dt_utc.astimezone(metorik_tz)
+
+            date_from_dt = datetime(
+                date_from_dt_ny.year, date_from_dt_ny.month, date_from_dt_ny.day,
+                0, 0, 0, tzinfo=metorik_tz
+            )
+            date_to_dt = datetime(
+                date_to_dt_ny.year, date_to_dt_ny.month, date_to_dt_ny.day,
+                23, 59, 59, tzinfo=metorik_tz
+            )
 
         # Generate list of dates to process
         dates_to_process = []
