@@ -482,12 +482,90 @@ def export_inventory_to_google_sheets(
             logger.info(f"Existing headers: {existing_headers}")
 
             # Always add new date column to the right (don't check if date already exists)
+            # Explicitly insert a new column to ensure it's created even if auto-expansion fails
             new_col_index = len(existing_headers) + 1
-            worksheet.update_cell(1, new_col_index, date_formatted)
-            logger.info(f"Added new date column header '{date_formatted}' at column {new_col_index}")
-            # Wait a moment for the update to complete
-            time.sleep(0.5)
-            date_col_index = new_col_index - 1  # Convert to 0-based index
+            date_col_index = new_col_index - 1  # Convert to 0-based index for API
+
+            try:
+                # Use batch_update to explicitly insert a column
+                # This ensures the column is created even if auto-expansion would fail
+                # Calculate current column count from existing headers
+                current_col_count = len(existing_headers)
+                insert_at_index = new_col_index - 1  # 0-based index
+
+                # Google Sheets API requires: startIndex < grid size if inheritFromBefore is false
+                # If we're inserting at the end, we need to either:
+                # 1. Resize the sheet first, OR
+                # 2. Use inheritFromBefore: true
+                # We'll resize first to ensure we have room, then insert
+
+                # Estimate grid size - use header count as minimum, but assume grid might be larger
+                # If inserting beyond header count, we likely need to resize
+                # Use a conservative approach: always resize if inserting at or beyond current count
+                requests = []
+
+                # If inserting at or beyond current column count, resize first
+                # We need grid size > insert_at_index when inheritFromBefore is false
+                # So if insert_at_index >= current_col_count, resize to at least insert_at_index + 1
+                if insert_at_index >= current_col_count:
+                    # Resize the sheet to add enough columns (insert_at_index + 1 + buffer)
+                    new_grid_size = insert_at_index + 11  # +1 to exceed insert index, +10 buffer
+                    resize_request = {
+                        'updateSheetProperties': {
+                            'properties': {
+                                'sheetId': worksheet.id,
+                                'gridProperties': {
+                                    'columnCount': new_grid_size
+                                }
+                            },
+                            'fields': 'gridProperties.columnCount'
+                        }
+                    }
+                    requests.append(resize_request)
+                    logger.info(f"Will resize sheet to {new_grid_size} columns before inserting")
+
+                # Insert dimension request: insert 1 column at the specified index
+                insert_request = {
+                    'insertDimension': {
+                        'range': {
+                            'sheetId': worksheet.id,
+                            'dimension': 'COLUMNS',
+                            'startIndex': insert_at_index,
+                            'endIndex': insert_at_index + 1  # Insert 1 column
+                        },
+                        'inheritFromBefore': False
+                    }
+                }
+                requests.append(insert_request)
+
+                body = {
+                    'requests': requests
+                }
+
+                logger.info(f"Explicitly inserting new column at index {insert_at_index} (column {new_col_index})")
+                spreadsheet.batch_update(body)
+                logger.info(f"Successfully inserted new column at column {new_col_index}")
+                time.sleep(0.5)  # Wait for the insert to complete
+
+            except Exception as insert_error:
+                # Fallback: try to write to the cell (rely on auto-expansion)
+                logger.warning(f"Failed to explicitly insert column: {insert_error}, falling back to auto-expansion")
+                try:
+                    worksheet.update_cell(1, new_col_index, date_formatted)
+                    logger.info(f"Added new date column header '{date_formatted}' at column {new_col_index} via auto-expansion")
+                    time.sleep(0.5)
+                except Exception as fallback_error:
+                    logger.error(f"Failed to add column via auto-expansion: {fallback_error}")
+                    raise
+
+            # Write the header to the new column
+            try:
+                worksheet.update_cell(1, new_col_index, date_formatted)
+                logger.info(f"Added new date column header '{date_formatted}' at column {new_col_index}")
+                time.sleep(0.5)  # Wait a moment for the update to complete
+            except Exception as header_error:
+                logger.error(f"Failed to write header to new column: {header_error}")
+                raise
 
             # Update or add rows for all products
             # First, create a mapping of existing SKUs to row numbers

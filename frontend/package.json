@@ -1,6 +1,6 @@
 {
   "name": "pfm-tools-frontend",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
