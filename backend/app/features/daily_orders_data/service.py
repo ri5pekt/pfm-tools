@@ -1070,8 +1070,8 @@ def find_row_by_date(worksheet: Any, input_date: str) -> Optional[int]:
     """
     try:
         logger.info(f"Finding row by date: {input_date} in worksheet '{worksheet.title}'")
-        # Read column A from row 3 to row 36 (matching export-stats.php range)
-        range_str = f"A3:A36"
+        # Read column A from row 5 to row 40 (dates start at row 5 in the sheet)
+        range_str = f"A5:A40"
         logger.info(f"Reading range: {range_str}")
         values = worksheet.get(range_str)
         logger.info(f"Found {len(values)} rows in range")
@@ -1083,7 +1083,7 @@ def find_row_by_date(worksheet: Any, input_date: str) -> Optional[int]:
         logger.info(f"Searching through {len(values)} rows for date matching '{input_date}'")
         found_dates = []
 
-        for row_index, row in enumerate(values, start=3):
+        for row_index, row in enumerate(values, start=5):
             if row and len(row) > 0:
                 cell_value = str(row[0]).strip()
                 if not cell_value:
