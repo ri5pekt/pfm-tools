@@ -1310,7 +1310,7 @@ def generate_comparison_report_csvs(
         orders_complyt_not_woo_path = os.path.join(output_dir, "orders_in_complyt_not_woocommerce.csv")
         with open(orders_complyt_not_woo_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Order ID', 'Amount', 'Order Date'])
+            writer.writerow(['Order ID', 'Order Total', 'Order Date'])
             for order_id in orders_in_complyt_not_woo:
                 amount = complyt_data['invoice_amounts'].get(order_id, 0)
                 # Try to get date from Complyt CSV first
@@ -1329,7 +1329,7 @@ def generate_comparison_report_csvs(
         orders_woo_not_complyt_path = os.path.join(output_dir, "orders_in_woocommerce_not_complyt.csv")
         with open(orders_woo_not_complyt_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Order ID', 'Status', 'Total', 'Date Created (UTC)'])
+            writer.writerow(['Order ID', 'Status', 'Order Total', 'Date Created (UTC)'])
             for order_id in orders_in_woo_not_complyt:
                 order = woo_data['orders'].get(order_id, {})
                 status = order.get('status', 'N/A')
@@ -1344,7 +1344,7 @@ def generate_comparison_report_csvs(
         refunds_complyt_not_woo_path = os.path.join(output_dir, "refunds_in_complyt_not_woocommerce.csv")
         with open(refunds_complyt_not_woo_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Refund ID', 'Type', 'Amount', 'Parent Order ID', 'Refund Date'])
+            writer.writerow(['Refund ID', 'Type', 'Amount', 'Parent Order ID', 'Order Total', 'Refund Date'])
             for refund_id in refunds_in_complyt_not_woo:
                 # Determine type
                 if refund_id in complyt_data['taxable_refunds']:
@@ -1368,7 +1368,17 @@ def generate_comparison_report_csvs(
                             refund_date = woo_refund.get('date_created', 'N/A')
                         logger.info(f"Refund {refund_id}: Using WooCommerce data (parent_order_id={parent_order_id}, date={refund_date})")
 
-                writer.writerow([refund_id, refund_type, amount, parent_order_id, refund_date])
+                # Get order total from WooCommerce if parent order ID is available
+                order_total = 'N/A'
+                if parent_order_id and parent_order_id != 'N/A':
+                    parent_order = woo_data['orders'].get(str(parent_order_id))
+                    if parent_order:
+                        order_total = parent_order.get('total', 'N/A')
+                    else:
+                        # Try Complyt data if not in WooCommerce
+                        order_total = complyt_data['invoice_amounts'].get(str(parent_order_id), 'N/A')
+
+                writer.writerow([refund_id, refund_type, amount, parent_order_id, order_total, refund_date])
         csv_files.append(refunds_complyt_not_woo_path)
 
     # 5. Refunds in WooCommerce but not in Complyt
@@ -1376,13 +1386,24 @@ def generate_comparison_report_csvs(
         refunds_woo_not_complyt_path = os.path.join(output_dir, "refunds_in_woocommerce_not_complyt.csv")
         with open(refunds_woo_not_complyt_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Refund ID', 'Order ID', 'Amount', 'Date Created'])
+            writer.writerow(['Refund ID', 'Order ID', 'Amount', 'Order Total', 'Date Created'])
             for refund_id in refunds_in_woo_not_complyt:
                 refund = woo_data['refunds'].get(refund_id, {})
                 order_id = refund.get('order_id', 'N/A')
                 amount = refund.get('amount', '0')
                 date_created = refund.get('date_created', 'N/A')
-                writer.writerow([refund_id, order_id, amount, date_created])
+                
+                # Get order total from WooCommerce
+                order_total = 'N/A'
+                if order_id and order_id != 'N/A':
+                    parent_order = woo_data['orders'].get(str(order_id))
+                    if parent_order:
+                        order_total = parent_order.get('total', 'N/A')
+                    else:
+                        # Try Complyt data if not in WooCommerce
+                        order_total = complyt_data['invoice_amounts'].get(str(order_id), 'N/A')
+                
+                writer.writerow([refund_id, order_id, amount, order_total, date_created])
         csv_files.append(refunds_woo_not_complyt_path)
 
     logger.info(f"Generated {len(csv_files)} CSV files in {output_dir}")

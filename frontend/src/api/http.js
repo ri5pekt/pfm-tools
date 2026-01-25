@@ -2,8 +2,8 @@
 
 // API base URL - set via VITE_API_BASE_URL at build time
 // Production: /api (proxied by nginx)
-// Development: http://localhost:8001/api
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8001/api";
+// Development: /api (proxied by Vite dev server to http://localhost:8001)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 async function http(path, { method = "GET", body, headers = {} } = {}) {
     const token = localStorage.getItem("pfm_token");

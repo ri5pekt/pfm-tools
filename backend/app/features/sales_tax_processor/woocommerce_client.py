@@ -375,6 +375,48 @@ class WooCommerceClient:
         logger.warning(f"  Transaction ID not found for order {order_id}")
         return None
 
+    def get_ppu_status_from_data(self, order_data: Optional[Dict[str, Any]], order_id: str = "") -> bool:
+        """
+        Check if order has PPU (post purchase upsell) by checking meta_data for ppu_products_count.
+        
+        Args:
+            order_data: Order data dictionary (from batch fetch or single fetch)
+            order_id: Order ID for logging purposes
+            
+        Returns:
+            True if order has PPU, False otherwise
+        """
+        if not order_data:
+            logger.debug(f"  No order data for PPU check (order {order_id})")
+            return False
+            
+        # Check meta_data for ppu_products_count
+        meta_data = order_data.get('meta_data', [])
+        
+        if not meta_data:
+            logger.debug(f"  No meta_data found for order {order_id}")
+            return False
+            
+        for meta in meta_data:
+            if isinstance(meta, dict):
+                key = meta.get('key', '')
+                value = meta.get('value')
+                
+                if key == 'ppu_products_count':
+                    logger.debug(f"  Found ppu_products_count for order {order_id}: {value}")
+                    # Check if value is not None, not empty, and greater than 0
+                    try:
+                        count = int(value) if value else 0
+                        has_ppu = count > 0
+                        logger.debug(f"  Order {order_id} has PPU: {has_ppu}")
+                        return has_ppu
+                    except (ValueError, TypeError):
+                        logger.warning(f"  Could not parse ppu_products_count value for order {order_id}: {value}")
+                        return False
+        
+        logger.debug(f"  No ppu_products_count meta found for order {order_id}")
+        return False
+
     def close(self):
         """Close the session."""
         if self.session:

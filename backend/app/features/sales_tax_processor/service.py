@@ -34,9 +34,11 @@ def find_order_id_column(row: Dict[str, Any], order_id_header: str) -> str:
     if order_id_header in row:
         return str(row[order_id_header]) if row[order_id_header] else ""
 
-    # Try case-insensitive match
+    # Try case-insensitive match and strip BOM characters
     for key, value in row.items():
-        if key.lower() == order_id_header.lower():
+        # Strip BOM and other whitespace from the key
+        clean_key = key.lstrip('\ufeff').strip()
+        if clean_key.lower() == order_id_header.lower():
             return str(value) if value else ""
 
     # Try common variations
@@ -44,6 +46,10 @@ def find_order_id_column(row: Dict[str, Any], order_id_header: str) -> str:
     for variation in common_variations:
         if variation in row:
             return str(row[variation]) if row[variation] else ""
+        # Also try with BOM prefix
+        bom_variation = '\ufeff' + variation
+        if bom_variation in row:
+            return str(row[bom_variation]) if row[bom_variation] else ""
 
     return ""
 
@@ -234,6 +240,29 @@ def process_batch(
         # Add basic columns
         row["######"] = "######"
         row["order id copy"] = order_id_value
+        
+        # Extract original CSV values for comparison
+        # Try to find taxableItemsAmount and salesTaxAmount columns (case-insensitive, strip BOM)
+        taxable_items_amount_original = None
+        sales_tax_amount_original = None
+        
+        for key in row.keys():
+            # Strip BOM and whitespace from key before comparing
+            clean_key = key.lstrip('\ufeff').strip().lower()
+            if clean_key == "taxableitemsamount":
+                try:
+                    val = row[key]
+                    if val and str(val).strip():
+                        taxable_items_amount_original = float(val)
+                except (ValueError, TypeError):
+                    logger.debug(f"Batch {batch_num}: Order {order_id_value} - Could not parse taxableItemsAmount: {row[key]}")
+            elif clean_key == "salestaxamount":
+                try:
+                    val = row[key]
+                    if val and str(val).strip():
+                        sales_tax_amount_original = float(val)
+                except (ValueError, TypeError):
+                    logger.debug(f"Batch {batch_num}: Order {order_id_value} - Could not parse salesTaxAmount: {row[key]}")
 
         # Get WooCommerce data
         if woo_client and order_id_value:
@@ -247,15 +276,35 @@ def process_batch(
 
                 totals = woo_client.get_order_totals_from_data(order_data, order_id_value)
                 payment_method = woo_client.get_payment_method_from_data(order_data, order_id_value)
+                has_ppu = woo_client.get_ppu_status_from_data(order_data, order_id_value)
 
-                logger.debug(f"Batch {batch_num}: Order {order_id_value} - Totals: {totals}, Payment method: {payment_method}")
+                logger.debug(f"Batch {batch_num}: Order {order_id_value} - Totals: {totals}, Payment method: {payment_method}, Has PPU: {has_ppu}")
 
                 row["woo_total_tax"] = str(totals["total_with_tax"]) if totals["total_with_tax"] is not None else ""
                 row["woo_tax"] = str(totals["tax"]) if totals["tax"] is not None else ""
                 row["woo_payment_method"] = payment_method if payment_method else ""
+                row["has_ppu"] = "Yes" if has_ppu else "No"
+                
+                # Calculate differences for WooCommerce data
+                # woo_total_tax_diff: WooCommerce taxable amount (total - tax) vs taxableItemsAmount from origin
+                if totals["total_with_tax"] is not None and totals["tax"] is not None and taxable_items_amount_original is not None:
+                    woo_taxable_amount = totals["total_with_tax"] - totals["tax"]
+                    woo_total_tax_diff = woo_taxable_amount - taxable_items_amount_original
+                    row["woo_total_tax_diff"] = str(round(woo_total_tax_diff, 2))
+                else:
+                    row["woo_total_tax_diff"] = ""
+                
+                # woo_tax_diff: WooCommerce tax vs salesTaxAmount from origin
+                if totals["tax"] is not None and sales_tax_amount_original is not None:
+                    woo_tax_diff = totals["tax"] - sales_tax_amount_original
+                    row["woo_tax_diff"] = str(round(woo_tax_diff, 2))
+                else:
+                    row["woo_tax_diff"] = ""
 
                 # Get processor data
                 processor_data_added = False
+                processor_total_value = None
+                processor_tax_value = None
 
                 # Braintree
                 if braintree_client and payment_method and payment_method.startswith("braintree_"):
@@ -263,8 +312,10 @@ def process_batch(
                     if transaction_id:
                         transaction_data = braintree_transaction_cache.get(transaction_id)
                         braintree_data = braintree_client.get_transaction_data_from_dict(transaction_data, transaction_id)
-                        row["processor_total"] = str(braintree_data["braintree_amount"]) if braintree_data["braintree_amount"] is not None else ""
-                        row["processor_tax"] = str(braintree_data["braintree_tax_amount"]) if braintree_data["braintree_tax_amount"] is not None else ""
+                        processor_total_value = braintree_data["braintree_amount"]
+                        processor_tax_value = braintree_data["braintree_tax_amount"]
+                        row["processor_total"] = str(processor_total_value) if processor_total_value is not None else ""
+                        row["processor_tax"] = str(processor_tax_value) if processor_tax_value is not None else ""
                         processor_data_added = True
 
                 # AfterPay - check for variations like "afterpay", "afterpay_us", "afterpay_clearpay", etc.
@@ -275,8 +326,10 @@ def process_batch(
                         if payment_data:
                             logger.debug(f"Batch {batch_num}: Order {order_id_value} - Processing AfterPay data (payment_id: {payment_id}, payment_method: {payment_method})")
                             afterpay_data = afterpay_client.get_payment_data_from_dict(payment_data, payment_id)
-                            row["processor_total"] = str(afterpay_data["processor_total"]) if afterpay_data["processor_total"] is not None else ""
-                            row["processor_tax"] = str(afterpay_data["processor_tax"]) if afterpay_data["processor_tax"] is not None else ""
+                            processor_total_value = afterpay_data["processor_total"]
+                            processor_tax_value = afterpay_data["processor_tax"]
+                            row["processor_total"] = str(processor_total_value) if processor_total_value is not None else ""
+                            row["processor_tax"] = str(processor_tax_value) if processor_tax_value is not None else ""
                             processor_data_added = True
                             logger.info(f"Batch {batch_num}: Order {order_id_value} - AfterPay data added: total={row['processor_total']}, tax={row['processor_tax']}")
                         else:
@@ -284,10 +337,40 @@ def process_batch(
                     else:
                         logger.warning(f"Batch {batch_num}: Order {order_id_value} - AfterPay payment method ({payment_method}) detected but no transaction_id found")
 
+                # Calculate processor differences
+                if braintree_client or afterpay_client:
+                    # processor_total_diff: Processor total vs taxableItemsAmount from origin
+                    if processor_total_value is not None and taxable_items_amount_original is not None:
+                        try:
+                            # Convert processor_total_value to float if it's a string
+                            processor_total_float = float(processor_total_value) if isinstance(processor_total_value, str) else processor_total_value
+                            processor_total_diff = processor_total_float - taxable_items_amount_original
+                            row["processor_total_diff"] = str(round(processor_total_diff, 2))
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Batch {batch_num}: Order {order_id_value} - Error calculating processor_total_diff: {str(e)}")
+                            row["processor_total_diff"] = ""
+                    else:
+                        row["processor_total_diff"] = ""
+                    
+                    # processor_tax_diff: Processor tax vs salesTaxAmount from origin
+                    if processor_tax_value is not None and sales_tax_amount_original is not None:
+                        try:
+                            # Convert processor_tax_value to float if it's a string
+                            processor_tax_float = float(processor_tax_value) if isinstance(processor_tax_value, str) else processor_tax_value
+                            processor_tax_diff = processor_tax_float - sales_tax_amount_original
+                            row["processor_tax_diff"] = str(round(processor_tax_diff, 2))
+                        except (ValueError, TypeError) as e:
+                            logger.error(f"Batch {batch_num}: Order {order_id_value} - Error calculating processor_tax_diff: {str(e)}")
+                            row["processor_tax_diff"] = ""
+                    else:
+                        row["processor_tax_diff"] = ""
+
                 # Set empty processor columns if not added
                 if not processor_data_added and (braintree_client or afterpay_client):
                     row["processor_total"] = ""
                     row["processor_tax"] = ""
+                    row["processor_total_diff"] = ""
+                    row["processor_tax_diff"] = ""
                     if payment_method:
                         logger.debug(f"Batch {batch_num}: Order {order_id_value} - No processor data added (payment_method: {payment_method})")
                     else:
@@ -298,23 +381,35 @@ def process_batch(
                 row["woo_total_tax"] = ""
                 row["woo_tax"] = ""
                 row["woo_payment_method"] = ""
+                row["woo_total_tax_diff"] = ""
+                row["woo_tax_diff"] = ""
+                row["has_ppu"] = ""
                 if braintree_client or afterpay_client:
                     row["processor_total"] = ""
                     row["processor_tax"] = ""
+                    row["processor_total_diff"] = ""
+                    row["processor_tax_diff"] = ""
         elif woo_client:
             # No order ID
             logger.debug(f"Batch {batch_num}: Row skipped - no order ID found")
             row["woo_total_tax"] = ""
             row["woo_tax"] = ""
             row["woo_payment_method"] = ""
+            row["woo_total_tax_diff"] = ""
+            row["woo_tax_diff"] = ""
+            row["has_ppu"] = ""
             if braintree_client or afterpay_client:
                 row["processor_total"] = ""
                 row["processor_tax"] = ""
+                row["processor_total_diff"] = ""
+                row["processor_tax_diff"] = ""
         else:
             # WooCommerce disabled
             if braintree_client or afterpay_client:
                 row["processor_total"] = ""
                 row["processor_tax"] = ""
+                row["processor_total_diff"] = ""
+                row["processor_tax_diff"] = ""
 
         writer.writerow(row)
         rows_written += 1
@@ -454,9 +549,21 @@ def process_sales_tax_job(job_id: int, db_session_factory):
             # Add new columns
             new_columns = ["######", "order id copy"]
             if woo_client:
-                new_columns.extend(["woo_total_tax", "woo_tax", "woo_payment_method"])
+                new_columns.extend([
+                    "woo_total_tax", 
+                    "woo_tax", 
+                    "woo_payment_method",
+                    "woo_total_tax_diff",
+                    "woo_tax_diff",
+                    "has_ppu"
+                ])
             if braintree_client or afterpay_client:
-                new_columns.extend(["processor_total", "processor_tax"])
+                new_columns.extend([
+                    "processor_total", 
+                    "processor_tax",
+                    "processor_total_diff",
+                    "processor_tax_diff"
+                ])
             fieldnames = original_fieldnames + new_columns
 
             logger.info(f"CSV columns: {fieldnames}")
