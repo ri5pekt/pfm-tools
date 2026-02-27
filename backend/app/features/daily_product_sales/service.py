@@ -66,12 +66,14 @@ def fetch_daily_product_sales_data(
         auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
 
         # Create session
+        # Use X-PFM-Authorization instead of Authorization to avoid WordPress core
+        # intercepting the standard Basic Auth header on WP Engine hosting.
         session = requests.Session()
         session.headers.update({
             'Accept': '*/*',
             'User-Agent': 'curl/7.68.0',
             'Accept-Encoding': 'gzip, deflate',
-            'Authorization': f'Basic {auth_b64}'
+            'X-PFM-Authorization': f'Basic {auth_b64}'
         })
 
         api_base = f"{woo_base_url.rstrip('/')}/wp-json/pfm-tools/v1"
@@ -364,12 +366,14 @@ def fetch_single_day_product_sales(
         auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
 
         # Create session
+        # Use X-PFM-Authorization instead of Authorization to avoid WordPress core
+        # intercepting the standard Basic Auth header on WP Engine hosting.
         session = requests.Session()
         session.headers.update({
             'Accept': '*/*',
             'User-Agent': 'curl/7.68.0',
             'Accept-Encoding': 'gzip, deflate',
-            'Authorization': f'Basic {auth_b64}'
+            'X-PFM-Authorization': f'Basic {auth_b64}'
         })
 
         api_base = f"{woo_base_url.rstrip('/')}/wp-json/pfm-tools/v1"

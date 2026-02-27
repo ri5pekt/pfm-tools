@@ -500,15 +500,17 @@ def fetch_woocommerce_orders(
         auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
 
         # Create a new session for custom endpoint (without session.auth to avoid conflicts)
+        # Use X-PFM-Authorization instead of Authorization to avoid WordPress core
+        # intercepting the standard Basic Auth header on WP Engine hosting.
         custom_session = requests.Session()
         custom_session.headers.update({
             'Accept': '*/*',
             'User-Agent': 'curl/7.68.0',
             'Accept-Encoding': 'gzip, deflate',
-            'Authorization': f'Basic {auth_b64}'
+            'X-PFM-Authorization': f'Basic {auth_b64}'
         })
-        logger.info(f"Created custom session for PFM Tools endpoint with explicit Authorization header")
-        logger.debug(f"Authorization header (first 30 chars): Basic {auth_b64[:30]}...")
+        logger.info(f"Created custom session for PFM Tools endpoint with explicit X-PFM-Authorization header")
+        logger.debug(f"X-PFM-Authorization header (first 30 chars): Basic {auth_b64[:30]}...")
 
         all_orders = []
         all_order_ids = []
