@@ -26,6 +26,12 @@ except Exception as e:
     logging.error(f"Failed to import daily_product_sales router: {e}", exc_info=True)
     daily_product_sales_router = None
 
+try:
+    from app.features.yt_influencers.routes import router as yt_influencers_router
+except Exception as e:
+    logging.error(f"Failed to import yt_influencers router: {e}", exc_info=True)
+    yt_influencers_router = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -141,6 +147,12 @@ if daily_product_sales_router:
     app.include_router(daily_product_sales_router)
 else:
     logging.error("Daily Product Sales router is None - not including routes")
+
+# YT Influencers → available at /api/app/yt-influencers/* (prefix already defined in router)
+if yt_influencers_router:
+    app.include_router(yt_influencers_router)
+else:
+    logging.error("YT Influencers router is None - not including routes")
 
 # Other modules later:
 # app.include_router(taxes_router, prefix="/api/taxes")

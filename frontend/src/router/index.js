@@ -11,6 +11,7 @@ import TikTokMarketplaceView from "../views/TikTokMarketplaceView.vue";
 import InventoryDataView from "../views/InventoryDataView.vue";
 import DailyOrdersDataView from "../views/DailyOrdersDataView.vue";
 import DailyProductSalesView from "../views/DailyProductSalesView.vue";
+import YtInfluencersView from "../views/YtInfluencersView.vue";
 
 const routes = [
     {
@@ -61,6 +62,11 @@ const routes = [
                 path: "daily-product-sales",
                 name: "daily-product-sales",
                 component: DailyProductSalesView,
+            },
+            {
+                path: "yt-influencers",
+                name: "yt-influencers",
+                component: YtInfluencersView,
             },
             {
                 path: "",

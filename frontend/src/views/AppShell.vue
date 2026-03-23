@@ -99,6 +99,14 @@
                         <i class="pi pi-shopping-cart"></i>
                         <span>Daily Product Sales</span>
                     </RouterLink>
+                    <RouterLink
+                        to="/app/yt-influencers"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-youtube"></i>
+                        <span>YT Influencers</span>
+                    </RouterLink>
                 </nav>
             </aside>
 

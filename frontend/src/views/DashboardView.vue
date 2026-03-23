@@ -126,6 +126,25 @@
                     </template>
                 </Card>
 
+                <!-- YT Influencers Service -->
+                <Card class="section-card" @click="$router.push({ name: 'yt-influencers' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-youtube section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">YT Influencers</h2>
+                            <p class="section-card-description">
+                                Export WooCommerce YT Influencer order data to CSV and Google Sheets with scheduled exports.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
+                        </div>
+                    </template>
+                </Card>
+
                 <!-- Daily Product Sales Service -->
                 <Card class="section-card" @click="$router.push({ name: 'daily-product-sales' })">
                     <template #content>

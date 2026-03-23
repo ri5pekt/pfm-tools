@@ -7,6 +7,7 @@ from app.jobs.models import ScheduledExport
 from app.features.inventory_data.scheduler_service import schedule_rq_job as schedule_inventory_export
 from app.features.ulta_marketplace.scheduler_service import schedule_rq_job as schedule_ulta_export
 from app.features.daily_orders_data.scheduler_service import schedule_rq_job as schedule_daily_orders_export
+from app.features.yt_influencers.scheduler_service import schedule_rq_job as schedule_yt_influencers_export
 
 # Configure logging
 logging.basicConfig(
@@ -105,6 +106,8 @@ def main():
                     rq_job_id = schedule_ulta_export(db, scheduled_export)
                 elif scheduled_export.feature == "daily_orders_data":
                     rq_job_id = schedule_daily_orders_export(db, scheduled_export)
+                elif scheduled_export.feature == "yt_influencers":
+                    rq_job_id = schedule_yt_influencers_export(db, scheduled_export)
                 else:
                     logger.warning(f"Unknown feature '{scheduled_export.feature}' for scheduled export {scheduled_export.id}, skipping")
                     continue

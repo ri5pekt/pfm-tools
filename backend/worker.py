@@ -11,6 +11,7 @@ from app.features.ulta_marketplace.worker import run_ulta_export_job  # noqa
 from app.features.inventory_data.worker import run_inventory_data_export_job  # noqa
 from app.features.tiktok_marketplace.worker import run_tiktok_export_job  # noqa
 from app.features.daily_product_sales.worker import run_daily_product_sales_export_job  # noqa
+from app.features.yt_influencers.worker import run_yt_influencers_export_job  # noqa
 
 # Configure logging
 logging.basicConfig(

@@ -91,6 +91,8 @@ class Settings(BaseSettings):
     # TikTok Marketplace specific spreadsheet ID
     tiktok_google_sheets_spreadsheet_id: Optional[str] = None  # TikTok Marketplace Google Sheets spreadsheet ID
     tiktok_google_sheets_sheet_name: Optional[str] = "TikTok Exports"  # TikTok Marketplace Google Sheets sheet name
+    # YT Influencers specific spreadsheet ID
+    yt_influencers_google_sheets_spreadsheet_id: Optional[str] = None  # YT Influencers Google Sheets spreadsheet ID
 
     # Where to read env vars from
     model_config = SettingsConfigDict(
