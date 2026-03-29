@@ -80,6 +80,13 @@ def create_scheduled_export_job(scheduled_export_id: int):
         rq_job = queue.enqueue(run_yt_influencers_export_job, job.id, job_timeout=3600)
         logger.info(f"Scheduled export {scheduled_export_id}: created job {job.id}, RQ job {rq_job.id if rq_job else 'N/A'}")
 
+        # Reschedule next occurrence using current timezone offset (handles DST automatically)
+        try:
+            schedule_rq_job(db, scheduled_export)
+            logger.info(f"Rescheduled next occurrence for scheduled export {scheduled_export_id}")
+        except Exception as resched_exc:
+            logger.warning(f"Could not reschedule next occurrence for {scheduled_export_id}: {resched_exc}")
+
     except Exception as e:
         logger.error(f"Error creating scheduled export job {scheduled_export_id}: {e}", exc_info=True)
     finally:
@@ -175,7 +182,7 @@ def schedule_rq_job(db: Session, scheduled_export: ScheduledExport):
             func=create_scheduled_export_job,
             args=(scheduled_export.id,),
             interval=interval_seconds,
-            repeat=None,
+            repeat=1,
             id=rq_job_id,
             queue_name=settings.rq_default_queue,
         )

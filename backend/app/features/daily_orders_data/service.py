@@ -902,7 +902,7 @@ def export_stats_to_google_sheets(
             converted_date = base_date
 
         # Format timestamp with domain (like export-stats.php)
-        current_time = datetime.now(timezone.utc) + timedelta(hours=3)
+        current_time = datetime.now(ZoneInfo("Asia/Jerusalem"))
         timestamp_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
         domain = "https://tools.pfm-qa.com/"
 

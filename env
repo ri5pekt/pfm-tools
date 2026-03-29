@@ -1,0 +1,59 @@
+# Core
+APP_ENV=development
+SECRET_KEY=super_secret_dev_key_change_me
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+# DB (matches docker-compose service "db")
+DATABASE_URL=postgresql+psycopg2://pfmtools:pfmtools@db:5432/pfmtools
+# Redis
+REDIS_URL=redis://redis:6379/0
+RQ_DEFAULT_QUEUE=pfmtools
+# CORS (frontend will be on 5173 later)
+BACKEND_CORS_ORIGINS=["http://localhost:5173"]
+# Data dirs (mounted via ./data:/data)
+DATA_DIR=/data
+UPLOADS_DIR=/data/uploads
+PROCESSED_DIR=/data/processed
+# WooCommerce API Configuration
+WOO_BASE_URL=https://www.particleformen.com
+WOO_CONSUMER_KEY=ck_597bfb235fcc35a4386fbe0c34fd7e72def53b20
+WOO_CONSUMER_SECRET=cs_2f9188de18d63a3b1a3d937b84400e263c937c1b
+# Braintree API Configuration
+BRAINTREE_MERCHANT_ID=y4mkhnwqj95zycvr
+BRAINTREE_PUBLIC_KEY=7nddzm5sc8db4xsr
+BRAINTREE_PRIVATE_KEY=0fc1735118c4afe3925e0025a28871d7
+BRAINTREE_ENVIRONMENT=production
+# AfterShip API Configuration
+AFTERSHIP_USERNAME=100147911
+AFTERSHIP_PASSWORD=ad7c1ec229d16f3f57f1d763db9d1940b6527ef0bf903b8f052e3a189b3a38c44b85e18aa8b4f3a7e91d29f1e7eef28789af35229af70510a51c7375ee4d16a1
+AFTERSHIP_BASE_URL=https://api.us.afterpay.com
+# Ulta API Configuration
+ULTA_BASE_URL=https://marketplace.ulta.com
+ULTA_API_KEY=8ef3467e-d24a-4358-b5fd-3b152d11fd64
+ULTA_GOOGLE_SHEETS_SHEET_NAME=Main
+ULTA_GOOGLE_SHEETS_SPREADSHEET_ID=1nHH2C84XUmOLnL4zeQvsc2XgwcSoCCz2UY3qIQrFmQk
+INVENTORY_GOOGLE_SHEETS_SPREADSHEET_ID=1xwu59jE4z_yLlTmzlChKHZ_Xbyg-GqSihw_rhFXK6XU
+ULTA_SCHEDULER_TEST_MODE=false
+ULTA_SCHEDULED_EXPORT_HOUR=9
+ULTA_SCHEDULED_EXPORT_MINUTE=0
+ULTA_SCHEDULED_EXPORT_TIMEZONE=Asia/Jerusalem
+# Google Sheets OAuth Configuration
+GOOGLE_SHEETS_OAUTH_CREDENTIALS_PATH=credentials/client_secret_google_sheets.json
+GOOGLE_SHEETS_OAUTH_TOKEN_PATH=credentials/google_sheets_token.pickle
+# Zenventory API Configuration
+ZENVENTORY_BASE_URL=https://app.zenventory.com/rest
+ZENVENTORY_KLB_USERNAME=+QOA8HtrClnNV2YIx0IUwo2EEQhvkOV7e11How491Z5lXnCZoSppNDxjw6zIzhW/
+ZENVENTORY_KLB_PASSWORD=vQTCvV9/1o31J0SNEVFly4WJ6p1zsU24Hf4Fgn9+z8xUuFOgm2INVQOmOaiT7oEx
+# Shipbob API Configuration
+SHIPBOB_API_KEY=3E673925F80C19A56356A01DEA7E6CA85E4D5A6A50B0512AC92E2977AF37EBBD-1
+SHIPBOB_BASE_URL=https://api.shipbob.com/2025-07
+# Daily orders Configuration
+DAILY_ORDERS_GOOGLE_SHEETS_SPREADSHEET_ID=184ugNbYIqJBiuzFHk7HgFWww7Gev5vMRW5gWWmwk5l4
+# Daily orders Configuration
+DAILY_PRODUCT_SALES_GOOGLE_SHEETS_SPREADSHEET_ID=130Ur14K-AsNWZRApSx7m_F3-djkgbpQsOiwa43GOoGY
+# Order Desk Configuration
+ORDERDESK_STORE_ID=123079
+ORDERDESK_API_KEY=u2z3L2KBAZvwa8eMdcagTLMNdd2NwrM5PxJeiWkgpxe6AGvFsw
+ORDERDESK_BASE_URL=https://app.orderdesk.me/api/v2
+TIKTOK_GOOGLE_SHEETS_SPREADSHEET_ID=13yEqBq3Ac3joFVwRUSFbEBMMsrbS3ncvDiPxaMba8ZQ
+# YT Influencers Configuration
+YT_INFLUENCERS_GOOGLE_SHEETS_SPREADSHEET_ID=14mgCE4BpBS_rYiq8oMgdymLPNVB9e2pV66Qos7pyKZE
