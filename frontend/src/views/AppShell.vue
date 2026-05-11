@@ -107,6 +107,14 @@
                         <i class="pi pi-youtube"></i>
                         <span>YT Influencers</span>
                     </RouterLink>
+                    <RouterLink
+                        to="/app/one-time-vs-subscription"
+                        class="nav-item nav-item-child"
+                        active-class="nav-item-active"
+                    >
+                        <i class="pi pi-chart-bar"></i>
+                        <span>One-Time vs Sub</span>
+                    </RouterLink>
                 </nav>
             </aside>
 

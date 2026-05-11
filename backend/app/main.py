@@ -32,6 +32,12 @@ except Exception as e:
     logging.error(f"Failed to import yt_influencers router: {e}", exc_info=True)
     yt_influencers_router = None
 
+try:
+    from app.features.one_time_vs_subscription.routes import router as one_time_vs_subscription_router
+except Exception as e:
+    logging.error(f"Failed to import one_time_vs_subscription router: {e}", exc_info=True)
+    one_time_vs_subscription_router = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -153,6 +159,12 @@ if yt_influencers_router:
     app.include_router(yt_influencers_router)
 else:
     logging.error("YT Influencers router is None - not including routes")
+
+# One-Time vs Subscription → available at /api/app/one-time-vs-subscription/* (prefix already defined in router)
+if one_time_vs_subscription_router:
+    app.include_router(one_time_vs_subscription_router)
+else:
+    logging.error("One-Time vs Subscription router is None - not including routes")
 
 # Other modules later:
 # app.include_router(taxes_router, prefix="/api/taxes")

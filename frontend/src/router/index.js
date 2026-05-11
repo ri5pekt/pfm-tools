@@ -12,6 +12,7 @@ import InventoryDataView from "../views/InventoryDataView.vue";
 import DailyOrdersDataView from "../views/DailyOrdersDataView.vue";
 import DailyProductSalesView from "../views/DailyProductSalesView.vue";
 import YtInfluencersView from "../views/YtInfluencersView.vue";
+import OneTimeVsSubscriptionView from "../views/OneTimeVsSubscriptionView.vue";
 
 const routes = [
     {
@@ -67,6 +68,11 @@ const routes = [
                 path: "yt-influencers",
                 name: "yt-influencers",
                 component: YtInfluencersView,
+            },
+            {
+                path: "one-time-vs-subscription",
+                name: "one-time-vs-subscription",
+                component: OneTimeVsSubscriptionView,
             },
             {
                 path: "",

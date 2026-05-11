@@ -164,6 +164,25 @@
                         </div>
                     </template>
                 </Card>
+
+                <!-- One-Time vs Subscription Service -->
+                <Card class="section-card" @click="$router.push({ name: 'one-time-vs-subscription' })">
+                    <template #content>
+                        <div class="section-card-content">
+                            <div class="section-icon-wrapper">
+                                <i class="pi pi-chart-bar section-icon"></i>
+                            </div>
+                            <h2 class="section-card-title">One-Time vs Subscription</h2>
+                            <p class="section-card-description">
+                                Export WooCommerce one-time vs subscription order stats to CSV and Google Sheets with scheduled exports.
+                            </p>
+                            <div class="section-card-footer">
+                                <span class="section-card-link">Open Service</span>
+                                <i class="pi pi-arrow-right"></i>
+                            </div>
+                        </div>
+                    </template>
+                </Card>
             </div>
         </div>
     </div>
