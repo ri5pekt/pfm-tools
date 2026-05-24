@@ -69,3 +69,78 @@ class ScheduledExportResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+# Low Stock Alert Schemas
+class LowStockAlertCreate(BaseModel):
+    name: str
+    period: str  # "minute", "daily", "weekly", "monthly"
+    frequency: int = 1
+    time: Optional[str] = None
+    times: Optional[list] = None  # Multiple daily times, e.g. ["09:00", "18:00"]
+    day_of_week: Optional[int] = None
+    day_of_month: Optional[int] = None
+    timezone: str = "UTC"
+    enabled: bool = True
+    threshold: Optional[int] = None  # Legacy: sets both if klb/shipbob not provided
+    klb_threshold: Optional[int] = None
+    shipbob_threshold: Optional[int] = None
+    slack_webhook_url: str
+    excluded_skus: Optional[list] = None
+
+
+class LowStockAlertUpdate(BaseModel):
+    name: Optional[str] = None
+    period: Optional[str] = None
+    frequency: Optional[int] = None
+    time: Optional[str] = None
+    times: Optional[list] = None
+    day_of_week: Optional[int] = None
+    day_of_month: Optional[int] = None
+    timezone: Optional[str] = None
+    enabled: Optional[bool] = None
+    threshold: Optional[int] = None
+    klb_threshold: Optional[int] = None
+    shipbob_threshold: Optional[int] = None
+    slack_webhook_url: Optional[str] = None
+    excluded_skus: Optional[list] = None
+
+
+class LowStockAlertResponse(BaseModel):
+    id: int
+    feature: str
+    name: str
+    period: str
+    frequency: int
+    time: Optional[str] = None
+    times: Optional[list] = None
+    day_of_week: Optional[int] = None
+    day_of_month: Optional[int] = None
+    timezone: str
+    enabled: bool
+    rq_job_id: Optional[str] = None
+    rq_job_ids: Optional[list] = None
+    threshold: Optional[int] = None
+    klb_threshold: int
+    shipbob_threshold: int
+    slack_webhook_url: str
+    excluded_skus: Optional[list] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LowStockAlertJobStatus(BaseModel):
+    id: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    error_message: Optional[str] = None
+    options: Optional[dict] = None
+
+
+class LowStockAlertRunResponse(BaseModel):
+    job_id: int
+    message: str
+

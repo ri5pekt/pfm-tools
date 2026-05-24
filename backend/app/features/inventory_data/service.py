@@ -18,6 +18,8 @@ HARDCODED_PRODUCTS = [
     {"title": "Particle Shampoo", "sku": "636665869661"},
     {"title": "Particle Body Wash", "sku": "636665869678"},
     {"title": "Particle Face Mask", "sku": "636665869654"},
+    {"title": "Particle Instant Eye Firming Cream", "sku": "00860012469796"},
+    {"title": "Particle Lip Balm", "sku": "00860012469789"},
     {"title": "Particle Skin Vitamin Gummy", "sku": "860005339747"},
     {"title": "Particle Beard Oil", "sku": "860005339723"},
     {"title": "Particle Face Wash", "sku": "636665869647"},
@@ -131,6 +133,92 @@ def fetch_shipbob_inventory_by_locations(api_key: str, base_url: str = None) -> 
     }
 
     return filtered_inventory, locations
+
+
+def fetch_shipbob_total_inventory(api_key: str, base_url: str = None) -> Dict[str, int]:
+    """
+    Fetch aggregated ShipBob inventory totals across all locations for hardcoded products.
+    """
+    shipbob_inventory, _locations = fetch_shipbob_inventory_by_locations(api_key, base_url)
+
+    aggregated = {}
+    for sku, locs in shipbob_inventory.items():
+        total_qty = sum(locs.values())
+        aggregated[sku] = total_qty
+
+    return aggregated
+
+
+def get_products_for_alert(excluded_skus: List[str] = None) -> List[Dict[str, str]]:
+    """Return hardcoded products minus excluded SKUs."""
+    excluded = set(str(sku).strip() for sku in (excluded_skus or []) if sku)
+    return [
+        product for product in HARDCODED_PRODUCTS
+        if str(product["sku"]).strip() not in excluded
+    ]
+
+
+def check_low_stock(
+    klb_inventory: Dict[str, int],
+    shipbob_inventory: Dict[str, int],
+    klb_threshold: int,
+    shipbob_threshold: int,
+    excluded_skus: List[str] = None,
+) -> Dict[str, Any]:
+    """
+    Check inventory against per-warehouse thresholds for KLB and ShipBob total.
+
+    Returns dict with klb_low_stock and shipbob_low_stock lists.
+    """
+    products = get_products_for_alert(excluded_skus)
+
+    klb_low = []
+    shipbob_low = []
+
+    for product in products:
+        sku = str(product["sku"]).strip()
+        title = product["title"]
+        klb_qty = klb_inventory.get(sku, 0) or 0
+        shipbob_qty = shipbob_inventory.get(sku, 0) or 0
+
+        if klb_qty < klb_threshold:
+            klb_low.append({"sku": sku, "title": title, "quantity": klb_qty})
+        if shipbob_qty < shipbob_threshold:
+            shipbob_low.append({"sku": sku, "title": title, "quantity": shipbob_qty})
+
+    return {
+        "klb_low_stock": klb_low,
+        "shipbob_low_stock": shipbob_low,
+        "total_low_items": len(klb_low) + len(shipbob_low),
+    }
+
+
+def build_low_stock_slack_message(
+    alert_name: str,
+    klb_threshold: int,
+    shipbob_threshold: int,
+    check_result: Dict[str, Any],
+    checked_at: str,
+) -> str:
+    """Build a plain-text Slack message for low stock alerts."""
+    lines = [
+        f":warning: *Low Stock Alert: {alert_name}*",
+        f"KLB threshold: {klb_threshold} | ShipBob threshold: {shipbob_threshold} | Checked: {checked_at}",
+        "",
+    ]
+
+    if check_result["klb_low_stock"]:
+        lines.append("*KLB (Zenventory):*")
+        for item in check_result["klb_low_stock"]:
+            lines.append(f"• {item['title']} ({item['sku']}) — {item['quantity']} units")
+        lines.append("")
+
+    if check_result["shipbob_low_stock"]:
+        lines.append("*ShipBob (Total):*")
+        for item in check_result["shipbob_low_stock"]:
+            lines.append(f"• {item['title']} ({item['sku']}) — {item['quantity']} units")
+
+    return "\n".join(lines).strip()
 
 
 def create_inventory_csv(

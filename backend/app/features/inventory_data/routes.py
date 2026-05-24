@@ -9,10 +9,25 @@ from sqlalchemy.orm import Session
 from . import schemas
 from ...dependencies import get_db, get_current_user
 from ...core.config import get_settings
-from ...jobs.models import Job, ScheduledExport
+from ...jobs.models import Job, ScheduledExport, LowStockAlert
 from ...jobs.queues import enqueue_job, cancel_job_by_id
 from .worker import run_inventory_data_export_job
+from .low_stock_alert_worker import run_low_stock_alert_job
 from .scheduler_service import schedule_rq_job, unschedule_rq_job
+from .alert_scheduler_service import schedule_rq_job as schedule_alert_rq_job, unschedule_rq_job as unschedule_alert_rq_job
+from .schedule_utils import (
+    parse_time_string,
+    validate_schedule_fields,
+    validate_slack_webhook_url,
+    normalize_excluded_skus,
+    normalize_times,
+    get_alert_daily_times,
+    get_alert_rq_job_ids,
+    get_alert_thresholds,
+    resolve_thresholds,
+    validate_thresholds,
+    low_stock_alert_to_dict,
+)
 
 router = APIRouter(
     prefix="/api/app/inventory-data",
@@ -540,4 +555,389 @@ def delete_scheduled_export(
     db.commit()
 
     return {"message": "Scheduled export deleted successfully"}
+
+
+# Low Stock Alert CRUD Routes
+@router.post("/low-stock-alerts", response_model=schemas.LowStockAlertResponse)
+def create_low_stock_alert(
+    request: schemas.LowStockAlertCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Create a new low stock alert configuration."""
+    frequency = request.frequency if request.frequency else 1
+    validate_schedule_fields(
+        period=request.period,
+        frequency=frequency,
+        time_str=request.time,
+        day_of_week=request.day_of_week,
+        day_of_month=request.day_of_month,
+        times=request.times,
+    )
+    validate_slack_webhook_url(request.slack_webhook_url)
+
+    klb_threshold, shipbob_threshold = resolve_thresholds(
+        threshold=request.threshold,
+        klb_threshold=request.klb_threshold,
+        shipbob_threshold=request.shipbob_threshold,
+    )
+    validate_thresholds(klb_threshold, shipbob_threshold)
+
+    daily_times = normalize_times(times=request.times, time_str=request.time) if request.period == "daily" else []
+    time_obj = parse_time_string(daily_times[0]) if daily_times else (
+        parse_time_string(request.time) if request.time else None
+    )
+
+    alert = LowStockAlert(
+        feature="inventory_data",
+        name=request.name,
+        period=request.period,
+        frequency=frequency,
+        time=time_obj,
+        times=daily_times if request.period == "daily" else None,
+        day_of_week=request.day_of_week,
+        day_of_month=request.day_of_month,
+        timezone=request.timezone,
+        enabled=request.enabled,
+        threshold=klb_threshold,
+        klb_threshold=klb_threshold,
+        shipbob_threshold=shipbob_threshold,
+        slack_webhook_url=request.slack_webhook_url.strip(),
+        excluded_skus=normalize_excluded_skus(request.excluded_skus),
+    )
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+
+    if alert.enabled:
+        schedule_alert_rq_job(db, alert)
+
+    return low_stock_alert_to_dict(alert)
+
+
+@router.get("/low-stock-alerts", response_model=List[schemas.LowStockAlertResponse])
+def list_low_stock_alerts(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """List all low stock alert configurations."""
+    alerts = db.query(LowStockAlert).filter(
+        LowStockAlert.feature == "inventory_data"
+    ).order_by(LowStockAlert.created_at.desc()).all()
+    return [low_stock_alert_to_dict(alert) for alert in alerts]
+
+
+@router.get("/low-stock-alerts/scheduler/status")
+def get_low_stock_alert_scheduler_status(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Get scheduler status for low stock alerts."""
+    from datetime import datetime, timezone
+    from ...jobs.queues import get_redis_connection
+
+    try:
+        enabled_alerts = db.query(LowStockAlert).filter(
+            LowStockAlert.feature == "inventory_data",
+            LowStockAlert.enabled == True,
+        ).all()
+
+        all_job_ids = []
+        for alert in enabled_alerts:
+            all_job_ids.extend(get_alert_rq_job_ids(alert))
+
+        if not all_job_ids:
+            last_job = db.query(Job).filter(
+                Job.feature == "inventory_data_low_stock_alert",
+                Job.options["is_manual"].astext == "false",
+            ).order_by(Job.created_at.desc()).first()
+
+            last_run = None
+            if last_job and last_job.created_at:
+                last_run = last_job.created_at
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+
+            return {
+                "scheduler_running": False,
+                "next_run": None,
+                "last_run": last_run.isoformat() if last_run else None,
+            }
+
+        conn = get_redis_connection()
+
+        try:
+            conn.ping()
+            scheduler_connected = True
+        except Exception:
+            scheduler_connected = False
+
+        next_run = None
+        try:
+            redis_conn = get_redis_connection()
+            for job_id in all_job_ids:
+                scheduled_score = redis_conn.zscore("rq:scheduler:scheduled_jobs", job_id)
+                if scheduled_score:
+                    candidate = datetime.fromtimestamp(scheduled_score, tz=timezone.utc)
+                    if next_run is None or candidate < next_run:
+                        next_run = candidate
+        except Exception:
+            pass
+
+        last_job = db.query(Job).filter(
+            Job.feature == "inventory_data_low_stock_alert",
+            Job.options["is_manual"].astext == "false",
+        ).order_by(Job.created_at.desc()).first()
+
+        last_run = None
+        if last_job and last_job.created_at:
+            last_run = last_job.created_at
+            if last_run.tzinfo is None:
+                last_run = last_run.replace(tzinfo=timezone.utc)
+
+        return {
+            "scheduler_running": scheduler_connected,
+            "next_run": next_run.isoformat() if next_run else None,
+            "last_run": last_run.isoformat() if last_run else None,
+        }
+    except Exception as e:
+        return {
+            "scheduler_running": False,
+            "next_run": None,
+            "last_run": None,
+            "error": str(e),
+        }
+
+
+@router.get("/low-stock-alerts/{alert_id}", response_model=schemas.LowStockAlertResponse)
+def get_low_stock_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Get a specific low stock alert configuration."""
+    alert = db.query(LowStockAlert).filter(
+        LowStockAlert.id == alert_id,
+        LowStockAlert.feature == "inventory_data",
+    ).first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Low stock alert not found")
+
+    return low_stock_alert_to_dict(alert)
+
+
+@router.put("/low-stock-alerts/{alert_id}", response_model=schemas.LowStockAlertResponse)
+def update_low_stock_alert(
+    alert_id: int,
+    request: schemas.LowStockAlertUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Update a low stock alert configuration."""
+    alert = db.query(LowStockAlert).filter(
+        LowStockAlert.id == alert_id,
+        LowStockAlert.feature == "inventory_data",
+    ).first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Low stock alert not found")
+
+    needs_reschedule = False
+
+    if request.frequency is not None:
+        if request.frequency < 1:
+            raise HTTPException(status_code=400, detail="frequency must be at least 1")
+        alert.frequency = request.frequency
+        needs_reschedule = True
+
+    if request.name is not None:
+        alert.name = request.name
+    if request.period is not None:
+        alert.period = request.period
+        needs_reschedule = True
+    if request.time is not None:
+        alert.time = parse_time_string(request.time)
+        needs_reschedule = True
+    if request.times is not None:
+        alert.times = normalize_times(times=request.times, time_str=None)
+        if alert.times:
+            alert.time = parse_time_string(alert.times[0])
+        needs_reschedule = True
+    if request.day_of_week is not None:
+        alert.day_of_week = request.day_of_week
+        needs_reschedule = True
+    if request.day_of_month is not None:
+        alert.day_of_month = request.day_of_month
+        needs_reschedule = True
+    if request.timezone is not None:
+        alert.timezone = request.timezone
+        needs_reschedule = True
+    if request.enabled is not None:
+        alert.enabled = request.enabled
+        needs_reschedule = True
+    if request.threshold is not None:
+        alert.threshold = request.threshold
+    if request.klb_threshold is not None:
+        alert.klb_threshold = request.klb_threshold
+    if request.shipbob_threshold is not None:
+        alert.shipbob_threshold = request.shipbob_threshold
+    if request.slack_webhook_url is not None:
+        validate_slack_webhook_url(request.slack_webhook_url)
+        alert.slack_webhook_url = request.slack_webhook_url.strip()
+    if request.excluded_skus is not None:
+        alert.excluded_skus = normalize_excluded_skus(request.excluded_skus)
+
+    period = alert.period
+    frequency = alert.frequency if alert.frequency else 1
+    time_str = alert.time.strftime("%H:%M") if alert.time else None
+    validate_schedule_fields(
+        period=period,
+        frequency=frequency,
+        time_str=time_str,
+        day_of_week=alert.day_of_week,
+        day_of_month=alert.day_of_month,
+        times=alert.times,
+    )
+
+    klb_threshold, shipbob_threshold = get_alert_thresholds(alert)
+    validate_thresholds(klb_threshold, shipbob_threshold)
+    alert.threshold = klb_threshold
+
+    if alert.period == "daily":
+        alert.times = get_alert_daily_times(alert)
+        if alert.times:
+            alert.time = parse_time_string(alert.times[0])
+
+    db.commit()
+    db.refresh(alert)
+
+    if needs_reschedule:
+        unschedule_alert_rq_job(db, alert)
+        if alert.enabled:
+            schedule_alert_rq_job(db, alert)
+
+    return low_stock_alert_to_dict(alert)
+
+
+@router.delete("/low-stock-alerts/{alert_id}")
+def delete_low_stock_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Delete a low stock alert configuration."""
+    alert = db.query(LowStockAlert).filter(
+        LowStockAlert.id == alert_id,
+        LowStockAlert.feature == "inventory_data",
+    ).first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Low stock alert not found")
+
+    if get_alert_rq_job_ids(alert):
+        unschedule_alert_rq_job(db, alert)
+
+    db.delete(alert)
+    db.commit()
+
+    return {"message": "Low stock alert deleted successfully"}
+
+
+@router.post("/low-stock-alerts/{alert_id}/run", response_model=schemas.LowStockAlertRunResponse)
+def run_low_stock_alert_now(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Manually run a low stock alert check."""
+    alert = db.query(LowStockAlert).filter(
+        LowStockAlert.id == alert_id,
+        LowStockAlert.feature == "inventory_data",
+    ).first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Low stock alert not found")
+
+    settings = get_settings()
+    zenventory_username = settings.zenventory_klb_username
+    zenventory_password = settings.zenventory_klb_password
+    zenventory_base_url = settings.zenventory_klb_base_url
+    shipbob_api_key = settings.shipbob_api_key
+    shipbob_base_url = settings.shipbob_base_url
+
+    if not zenventory_username or not zenventory_password:
+        raise HTTPException(
+            status_code=500,
+            detail="Zenventory KLB credentials not configured.",
+        )
+
+    if not shipbob_api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Shipbob API key not configured.",
+        )
+
+    klb_threshold, shipbob_threshold = get_alert_thresholds(alert)
+
+    job = Job(
+        feature="inventory_data_low_stock_alert",
+        status="pending",
+        input_filename="",
+        options={
+            "is_manual": True,
+            "low_stock_alert_id": alert.id,
+            "alert_name": alert.name,
+            "threshold": alert.threshold,
+            "klb_threshold": klb_threshold,
+            "shipbob_threshold": shipbob_threshold,
+            "slack_webhook_url": alert.slack_webhook_url,
+            "excluded_skus": alert.excluded_skus or [],
+            "zenventory_username": zenventory_username,
+            "zenventory_password": zenventory_password,
+            "zenventory_base_url": zenventory_base_url,
+            "shipbob_api_key": shipbob_api_key,
+            "shipbob_base_url": shipbob_base_url,
+            "progress": 0,
+            "status_message": "Queued for processing",
+        },
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    enqueue_job(run_low_stock_alert_job, job.id, job_timeout=1800)
+
+    return schemas.LowStockAlertRunResponse(
+        job_id=job.id,
+        message="Low stock alert check queued successfully",
+    )
+
+
+@router.get("/low-stock-alert-jobs", response_model=List[schemas.LowStockAlertJobStatus])
+def list_low_stock_alert_jobs(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """List low stock alert job history."""
+    jobs = db.query(Job).filter(
+        Job.feature == "inventory_data_low_stock_alert"
+    ).order_by(Job.created_at.desc()).limit(100).all()
+    return jobs
+
+
+@router.get("/low-stock-alert-jobs/{job_id}", response_model=schemas.LowStockAlertJobStatus)
+def get_low_stock_alert_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Get a specific low stock alert job."""
+    job = db.query(Job).filter(
+        Job.id == job_id,
+        Job.feature == "inventory_data_low_stock_alert",
+    ).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 

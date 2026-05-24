@@ -254,6 +254,296 @@
             </template>
         </Dialog>
 
+        <!-- Low Stock Alerts Section -->
+        <Card class="scheduler-card">
+            <template #header>
+                <div class="card-header">
+                    <i class="pi pi-bell"></i>
+                    <h3>Low Stock Alerts</h3>
+                    <Button
+                        label="New Low Stock Alert"
+                        icon="pi pi-plus"
+                        class="p-button-sm"
+                        @click="showAlertDialog = true"
+                    />
+                </div>
+            </template>
+            <template #content>
+                <div class="scheduled-exports-list">
+                    <div v-if="lowStockAlerts.length === 0" class="empty-scheduled">
+                        <i class="pi pi-bell-slash"></i>
+                        <p>No low stock alerts</p>
+                        <p class="text-sm text-color-secondary">Create an alert to get Slack notifications when stock is low</p>
+                    </div>
+                    <div v-for="alert in lowStockAlerts" :key="alert.id" class="scheduled-item">
+                        <div class="scheduled-header">
+                            <div class="scheduled-info">
+                                <div class="scheduled-name">
+                                    <i class="pi pi-bell"></i>
+                                    <span>{{ alert.name }}</span>
+                                </div>
+                                <div class="scheduled-details">
+                                    <Tag
+                                        :value="getPeriodLabel(alert.period)"
+                                        severity="warning"
+                                        class="period-tag"
+                                    />
+                                    <span class="scheduled-schedule">{{ getScheduleDescription(alert) }}</span>
+                                    <Tag
+                                        :value="`KLB: ${alert.klb_threshold ?? alert.threshold} | ShipBob: ${alert.shipbob_threshold ?? alert.threshold}`"
+                                        severity="info"
+                                        class="period-tag"
+                                    />
+                                    <Tag
+                                        :value="alert.enabled ? 'Enabled' : 'Disabled'"
+                                        :severity="alert.enabled ? 'success' : 'secondary'"
+                                        class="status-tag"
+                                    />
+                                </div>
+                            </div>
+                            <div class="scheduled-actions">
+                                <Button
+                                    icon="pi pi-play"
+                                    severity="success"
+                                    text
+                                    rounded
+                                    :aria-label="'Run alert now'"
+                                    :loading="runningAlertId === alert.id"
+                                    @click="handleRunAlert(alert.id)"
+                                />
+                                <Button
+                                    icon="pi pi-pencil"
+                                    severity="secondary"
+                                    text
+                                    rounded
+                                    :aria-label="'Edit low stock alert'"
+                                    @click="editLowStockAlert(alert)"
+                                />
+                                <Button
+                                    icon="pi pi-trash"
+                                    severity="danger"
+                                    text
+                                    rounded
+                                    :aria-label="'Delete low stock alert'"
+                                    @click="confirmDeleteAlert(alert)"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="scheduler-status-section" v-if="alertSchedulerStatus">
+                    <div class="scheduler-info-item">
+                        <div class="scheduler-label">
+                            <i class="pi pi-calendar-plus"></i>
+                            <span>Next Alert Check:</span>
+                        </div>
+                        <div class="scheduler-value">
+                            <span v-if="alertSchedulerStatus.next_run" class="text-primary font-semibold">
+                                {{ formatDateTime(alertSchedulerStatus.next_run) }}
+                            </span>
+                            <span v-else class="text-color-secondary">Not scheduled</span>
+                        </div>
+                    </div>
+                    <div class="scheduler-info-item">
+                        <div class="scheduler-label">
+                            <i class="pi pi-history"></i>
+                            <span>Last Alert Check:</span>
+                        </div>
+                        <div class="scheduler-value">
+                            <span v-if="alertSchedulerStatus.last_run" class="text-color-secondary">
+                                {{ formatDateTime(alertSchedulerStatus.last_run) }}
+                            </span>
+                            <span v-else class="text-color-secondary">Never</span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </Card>
+
+        <!-- Create/Edit Low Stock Alert Dialog -->
+        <Dialog
+            v-model:visible="showAlertDialog"
+            :header="editingAlert ? 'Edit Low Stock Alert' : 'Create Low Stock Alert'"
+            :modal="true"
+            :style="{ width: '600px' }"
+            @hide="resetAlertForm"
+        >
+            <form @submit.prevent="saveLowStockAlert">
+                <div class="form-field">
+                    <label for="alert-name">Name *</label>
+                    <InputText
+                        id="alert-name"
+                        v-model="alertForm.name"
+                        placeholder="e.g., Daily Low Stock Check"
+                        :class="{ 'p-invalid': alertFormErrors.name }"
+                    />
+                    <small v-if="alertFormErrors.name" class="p-error">{{ alertFormErrors.name }}</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-klb-threshold">KLB Threshold *</label>
+                    <InputNumber
+                        id="alert-klb-threshold"
+                        v-model="alertForm.klb_threshold"
+                        :min="0"
+                        placeholder="Alert when KLB stock is below this value"
+                        :class="{ 'p-invalid': alertFormErrors.klb_threshold }"
+                    />
+                    <small v-if="alertFormErrors.klb_threshold" class="p-error">{{ alertFormErrors.klb_threshold }}</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-shipbob-threshold">ShipBob Threshold *</label>
+                    <InputNumber
+                        id="alert-shipbob-threshold"
+                        v-model="alertForm.shipbob_threshold"
+                        :min="0"
+                        placeholder="Alert when ShipBob stock is below this value"
+                        :class="{ 'p-invalid': alertFormErrors.shipbob_threshold }"
+                    />
+                    <small v-if="alertFormErrors.shipbob_threshold" class="p-error">{{ alertFormErrors.shipbob_threshold }}</small>
+                    <small class="p-text-secondary">Set different thresholds per warehouse if needed</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-webhook">Slack Webhook URL *</label>
+                    <InputText
+                        id="alert-webhook"
+                        v-model="alertForm.slack_webhook_url"
+                        placeholder="https://hooks.slack.com/services/..."
+                        :class="{ 'p-invalid': alertFormErrors.slack_webhook_url }"
+                    />
+                    <small v-if="alertFormErrors.slack_webhook_url" class="p-error">{{ alertFormErrors.slack_webhook_url }}</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-excluded-skus">Excluded SKUs</label>
+                    <InputText
+                        id="alert-excluded-skus"
+                        v-model="alertForm.excluded_skus_text"
+                        placeholder="Comma-separated SKUs to exclude (optional)"
+                    />
+                    <small class="p-text-secondary">Products with these SKUs will not trigger alerts</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-period">Period *</label>
+                    <Select
+                        id="alert-period"
+                        v-model="alertForm.period"
+                        :options="periodOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select period"
+                        :class="{ 'p-invalid': alertFormErrors.period }"
+                        @change="onAlertPeriodChange"
+                    />
+                    <small v-if="alertFormErrors.period" class="p-error">{{ alertFormErrors.period }}</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-frequency">Frequency *</label>
+                    <InputNumber
+                        id="alert-frequency"
+                        v-model="alertForm.frequency"
+                        :min="1"
+                        placeholder="Every X"
+                        :class="{ 'p-invalid': alertFormErrors.frequency }"
+                    />
+                    <small v-if="alertFormErrors.frequency" class="p-error">{{ alertFormErrors.frequency }}</small>
+                </div>
+
+                <div class="form-field" v-if="alertForm.period === 'daily'">
+                    <label for="alert-times">Times *</label>
+                    <InputText
+                        id="alert-times"
+                        v-model="alertForm.times_text"
+                        placeholder="09:00, 18:00"
+                        :class="{ 'p-invalid': alertFormErrors.times }"
+                    />
+                    <small v-if="alertFormErrors.times" class="p-error">{{ alertFormErrors.times }}</small>
+                    <small class="p-text-secondary">Comma-separated times in 24-hour format (e.g., 09:00, 18:00 for 9 AM and 6 PM)</small>
+                </div>
+
+                <div class="form-field" v-if="alertForm.period === 'weekly' || alertForm.period === 'monthly'">
+                    <label for="alert-time">Time *</label>
+                    <InputText
+                        id="alert-time"
+                        v-model="alertForm.time"
+                        placeholder="HH:MM (24-hour format, e.g., 09:00)"
+                        :class="{ 'p-invalid': alertFormErrors.time }"
+                    />
+                    <small v-if="alertFormErrors.time" class="p-error">{{ alertFormErrors.time }}</small>
+                </div>
+
+                <div class="form-field" v-if="alertForm.period === 'weekly'">
+                    <label for="alert-day-of-week">Day of Week *</label>
+                    <Select
+                        id="alert-day-of-week"
+                        v-model="alertForm.day_of_week"
+                        :options="dayOfWeekOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select day"
+                        :class="{ 'p-invalid': alertFormErrors.day_of_week }"
+                    />
+                    <small v-if="alertFormErrors.day_of_week" class="p-error">{{ alertFormErrors.day_of_week }}</small>
+                </div>
+
+                <div class="form-field" v-if="alertForm.period === 'monthly'">
+                    <label for="alert-day-of-month">Day of Month *</label>
+                    <InputNumber
+                        id="alert-day-of-month"
+                        v-model="alertForm.day_of_month"
+                        :min="1"
+                        :max="31"
+                        placeholder="1-31"
+                        :class="{ 'p-invalid': alertFormErrors.day_of_month }"
+                    />
+                    <small v-if="alertFormErrors.day_of_month" class="p-error">{{ alertFormErrors.day_of_month }}</small>
+                </div>
+
+                <div class="form-field">
+                    <label for="alert-timezone">Timezone *</label>
+                    <Select
+                        id="alert-timezone"
+                        v-model="alertForm.timezone"
+                        :options="timezoneOptions"
+                        placeholder="Select timezone"
+                        :class="{ 'p-invalid': alertFormErrors.timezone }"
+                    />
+                    <small v-if="alertFormErrors.timezone" class="p-error">{{ alertFormErrors.timezone }}</small>
+                </div>
+
+                <div class="form-field">
+                    <div class="flex align-items-center gap-2">
+                        <Checkbox
+                            id="alert-enabled"
+                            v-model="alertForm.enabled"
+                            :binary="true"
+                        />
+                        <label for="alert-enabled">Enabled</label>
+                    </div>
+                </div>
+            </form>
+
+            <template #footer>
+                <Button
+                    label="Cancel"
+                    icon="pi pi-times"
+                    severity="secondary"
+                    @click="showAlertDialog = false"
+                />
+                <Button
+                    :label="editingAlert ? 'Update' : 'Create'"
+                    icon="pi pi-check"
+                    @click="saveLowStockAlert"
+                    :loading="savingAlert"
+                />
+            </template>
+        </Dialog>
+
         <!-- Manual Export Section -->
         <Card class="upload-card">
             <template #header>
@@ -420,6 +710,13 @@ import {
     getScheduledExports,
     updateScheduledExport,
     deleteScheduledExport,
+    createLowStockAlert,
+    getLowStockAlerts,
+    updateLowStockAlert,
+    deleteLowStockAlert,
+    runLowStockAlert,
+    getLowStockAlertSchedulerStatus,
+    getLowStockAlertJobs,
 } from "../api/inventoryDataApi.js";
 
 const confirm = useConfirm();
@@ -432,6 +729,13 @@ const scheduledExports = ref([]);
 const showCreateDialog = ref(false);
 const editingScheduled = ref(false);
 const savingScheduled = ref(false);
+const lowStockAlerts = ref([]);
+const alertSchedulerStatus = ref(null);
+const alertJobs = ref([]);
+const showAlertDialog = ref(false);
+const editingAlert = ref(false);
+const savingAlert = ref(false);
+const runningAlertId = ref(null);
 const exportToFile = ref(true);
 const exportToGoogleSheets = ref(true);
 
@@ -447,6 +751,24 @@ const scheduledForm = ref({
 });
 
 const scheduledFormErrors = ref({});
+
+const alertForm = ref({
+    name: "",
+    klb_threshold: 100,
+    shipbob_threshold: 100,
+    slack_webhook_url: "",
+    excluded_skus_text: "",
+    period: null,
+    frequency: 1,
+    time: null,
+    times_text: "",
+    day_of_week: null,
+    day_of_month: null,
+    timezone: "UTC",
+    enabled: true,
+});
+
+const alertFormErrors = ref({});
 
 const periodOptions = [
     { label: "Minute", value: "minute" },
@@ -736,8 +1058,11 @@ function getScheduleDescription(scheduled) {
         desc = `Every ${frequency} minute${frequency !== 1 ? "s" : ""}`;
     } else if (scheduled.period === "daily") {
         desc = `Every ${frequency} day${frequency !== 1 ? "s" : ""}`;
-        if (scheduled.time) {
-            desc += ` at ${scheduled.time}`;
+        const times = scheduled.times && scheduled.times.length > 0
+            ? scheduled.times
+            : (scheduled.time ? [scheduled.time] : []);
+        if (times.length > 0) {
+            desc += ` at ${times.join(", ")}`;
         }
     } else if (scheduled.period === "weekly") {
         desc = `Every ${frequency} week${frequency !== 1 ? "s" : ""}`;
@@ -954,13 +1279,338 @@ async function handleDeleteScheduled(id) {
     }
 }
 
+function parseExcludedSkus(text) {
+    if (!text || !text.trim()) return [];
+    return text
+        .split(/[,\n]/)
+        .map((sku) => sku.trim())
+        .filter((sku) => sku.length > 0);
+}
+
+function parseTimes(text) {
+    if (!text || !text.trim()) return [];
+    return text
+        .split(/[,\n]/)
+        .map((time) => time.trim())
+        .filter((time) => time.length > 0);
+}
+
+function formatTimes(times) {
+    if (!times || times.length === 0) return "";
+    return times.join(", ");
+}
+
+function formatExcludedSkus(excludedSkus) {
+    if (!excludedSkus || excludedSkus.length === 0) return "";
+    return excludedSkus.join(", ");
+}
+
+async function loadLowStockAlerts() {
+    try {
+        lowStockAlerts.value = await getLowStockAlerts();
+    } catch (error) {
+        console.error("Failed to load low stock alerts:", error);
+        toast.add({
+            severity: "error",
+            summary: "Error",
+            detail: "Failed to load low stock alerts",
+            life: 3000,
+        });
+    }
+}
+
+async function loadAlertSchedulerStatus() {
+    try {
+        alertSchedulerStatus.value = await getLowStockAlertSchedulerStatus();
+    } catch (error) {
+        console.error("Failed to load alert scheduler status:", error);
+    }
+}
+
+async function loadAlertJobs() {
+    try {
+        alertJobs.value = await getLowStockAlertJobs();
+    } catch (error) {
+        console.error("Failed to load alert jobs:", error);
+    }
+}
+
+function resetAlertForm() {
+    alertForm.value = {
+        name: "",
+        klb_threshold: 100,
+        shipbob_threshold: 100,
+        slack_webhook_url: "",
+        excluded_skus_text: "",
+        period: null,
+        frequency: 1,
+        time: null,
+        times_text: "",
+        day_of_week: null,
+        day_of_month: null,
+        timezone: "UTC",
+        enabled: true,
+    };
+    alertFormErrors.value = {};
+    editingAlert.value = false;
+}
+
+function onAlertPeriodChange() {
+    alertForm.value.day_of_week = null;
+    alertForm.value.day_of_month = null;
+    if (alertForm.value.period !== "daily") {
+        alertForm.value.times_text = "";
+    }
+    if (alertForm.value.period === "daily") {
+        alertForm.value.time = null;
+    }
+}
+
+function editLowStockAlert(alert) {
+    alertForm.value = {
+        name: alert.name,
+        klb_threshold: alert.klb_threshold ?? alert.threshold ?? 100,
+        shipbob_threshold: alert.shipbob_threshold ?? alert.threshold ?? 100,
+        slack_webhook_url: alert.slack_webhook_url,
+        excluded_skus_text: formatExcludedSkus(alert.excluded_skus),
+        period: alert.period,
+        frequency: alert.frequency || 1,
+        time: alert.period === "daily" ? null : alert.time,
+        times_text: alert.period === "daily" ? formatTimes(alert.times || (alert.time ? [alert.time] : [])) : "",
+        day_of_week: alert.day_of_week,
+        day_of_month: alert.day_of_month,
+        timezone: alert.timezone,
+        enabled: alert.enabled,
+    };
+    editingAlert.value = alert;
+    showAlertDialog.value = true;
+}
+
+function validateAlertForm() {
+    alertFormErrors.value = {};
+
+    if (!alertForm.value.name || alertForm.value.name.trim() === "") {
+        alertFormErrors.value.name = "Name is required";
+    }
+
+    if (alertForm.value.klb_threshold === null || alertForm.value.klb_threshold === undefined || alertForm.value.klb_threshold < 0) {
+        alertFormErrors.value.klb_threshold = "KLB threshold must be 0 or greater";
+    }
+
+    if (alertForm.value.shipbob_threshold === null || alertForm.value.shipbob_threshold === undefined || alertForm.value.shipbob_threshold < 0) {
+        alertFormErrors.value.shipbob_threshold = "ShipBob threshold must be 0 or greater";
+    }
+
+    if (!alertForm.value.slack_webhook_url || !alertForm.value.slack_webhook_url.trim().startsWith("https://hooks.slack.com/")) {
+        alertFormErrors.value.slack_webhook_url = "Valid Slack Webhook URL is required";
+    }
+
+    if (!alertForm.value.period) {
+        alertFormErrors.value.period = "Period is required";
+    }
+
+    if (!alertForm.value.frequency || alertForm.value.frequency < 1) {
+        alertFormErrors.value.frequency = "Frequency must be at least 1";
+    }
+
+    if (alertForm.value.period === "daily") {
+        const times = parseTimes(alertForm.value.times_text);
+        if (times.length === 0) {
+            alertFormErrors.value.times = "At least one time is required for daily period";
+        } else {
+            const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+            for (const time of times) {
+                if (!timeRegex.test(time)) {
+                    alertFormErrors.value.times = `Invalid time format: ${time}. Use HH:MM (24-hour)`;
+                    break;
+                }
+            }
+        }
+    } else if (alertForm.value.period === "weekly" || alertForm.value.period === "monthly") {
+        if (!alertForm.value.time) {
+            alertFormErrors.value.time = `Time is required for ${alertForm.value.period} period`;
+        } else {
+            const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+            if (!timeRegex.test(alertForm.value.time)) {
+                alertFormErrors.value.time = "Time must be in HH:MM format (24-hour)";
+            }
+        }
+    }
+
+    if (alertForm.value.period === "weekly" && alertForm.value.day_of_week === null) {
+        alertFormErrors.value.day_of_week = "Day of week is required for weekly period";
+    }
+
+    if (alertForm.value.period === "monthly") {
+        if (alertForm.value.day_of_month === null) {
+            alertFormErrors.value.day_of_month = "Day of month is required for monthly period";
+        } else if (alertForm.value.day_of_month < 1 || alertForm.value.day_of_month > 31) {
+            alertFormErrors.value.day_of_month = "Day of month must be between 1 and 31";
+        }
+    }
+
+    if (!alertForm.value.timezone) {
+        alertFormErrors.value.timezone = "Timezone is required";
+    }
+
+    return Object.keys(alertFormErrors.value).length === 0;
+}
+
+async function saveLowStockAlert() {
+    if (!validateAlertForm()) {
+        return;
+    }
+
+    savingAlert.value = true;
+    try {
+        const dailyTimes = alertForm.value.period === "daily" ? parseTimes(alertForm.value.times_text) : [];
+        const data = {
+            name: alertForm.value.name,
+            klb_threshold: alertForm.value.klb_threshold,
+            shipbob_threshold: alertForm.value.shipbob_threshold,
+            slack_webhook_url: alertForm.value.slack_webhook_url.trim(),
+            excluded_skus: parseExcludedSkus(alertForm.value.excluded_skus_text),
+            period: alertForm.value.period,
+            frequency: alertForm.value.frequency || 1,
+            time: alertForm.value.period === "daily" ? null : alertForm.value.time,
+            times: alertForm.value.period === "daily" ? dailyTimes : null,
+            day_of_week: alertForm.value.day_of_week,
+            day_of_month: alertForm.value.day_of_month,
+            timezone: alertForm.value.timezone,
+            enabled: alertForm.value.enabled,
+        };
+
+        if (editingAlert.value) {
+            await updateLowStockAlert(editingAlert.value.id, data);
+            toast.add({
+                severity: "success",
+                summary: "Low Stock Alert Updated",
+                detail: "Low stock alert has been updated successfully",
+                life: 3000,
+            });
+        } else {
+            await createLowStockAlert(data);
+            toast.add({
+                severity: "success",
+                summary: "Low Stock Alert Created",
+                detail: "Low stock alert has been created successfully",
+                life: 3000,
+            });
+        }
+
+        showAlertDialog.value = false;
+        await loadLowStockAlerts();
+        await loadAlertSchedulerStatus();
+    } catch (error) {
+        console.error("Error saving low stock alert:", error);
+        toast.add({
+            severity: "error",
+            summary: "Error",
+            detail: error.message || "Failed to save low stock alert",
+            life: 5000,
+        });
+    } finally {
+        savingAlert.value = false;
+    }
+}
+
+function confirmDeleteAlert(alert) {
+    confirm.require({
+        message: `Are you sure you want to delete the low stock alert "${alert.name}"?`,
+        header: "Delete Low Stock Alert",
+        icon: "pi pi-exclamation-triangle",
+        rejectClass: "p-button-secondary p-button-outlined",
+        rejectLabel: "Cancel",
+        acceptLabel: "Delete",
+        accept: async () => {
+            await handleDeleteAlert(alert.id);
+        },
+    });
+}
+
+async function handleDeleteAlert(id) {
+    try {
+        await deleteLowStockAlert(id);
+        toast.add({
+            severity: "success",
+            summary: "Low Stock Alert Deleted",
+            detail: "Low stock alert has been deleted",
+            life: 3000,
+        });
+        await loadLowStockAlerts();
+        await loadAlertSchedulerStatus();
+    } catch (error) {
+        console.error("Delete error:", error);
+        toast.add({
+            severity: "error",
+            summary: "Delete Failed",
+            detail: error.message || "Failed to delete low stock alert",
+            life: 4000,
+        });
+    }
+}
+
+async function handleRunAlert(alertId) {
+    runningAlertId.value = alertId;
+    try {
+        const response = await runLowStockAlert(alertId);
+        toast.add({
+            severity: "success",
+            summary: "Alert Check Started",
+            detail: `Job ${response.job_id} has been queued`,
+            life: 3000,
+        });
+        await loadAlertJobs();
+        pollAlertJobStatus(response.job_id);
+    } catch (error) {
+        console.error("Run alert error:", error);
+        toast.add({
+            severity: "error",
+            summary: "Alert Check Failed",
+            detail: error.message || "Failed to start alert check",
+            life: 5000,
+        });
+    } finally {
+        runningAlertId.value = null;
+    }
+}
+
+function pollAlertJobStatus(jobId) {
+    const interval = setInterval(async () => {
+        try {
+            await loadAlertJobs();
+            const job = alertJobs.value.find((j) => j.id === jobId);
+            if (job && (job.status === "done" || job.status === "error")) {
+                clearInterval(interval);
+                if (job.status === "done") {
+                    const itemsFound = job.options?.items_found || 0;
+                    toast.add({
+                        severity: itemsFound > 0 ? "warn" : "success",
+                        summary: itemsFound > 0 ? "Low Stock Found" : "All Stock OK",
+                        detail: job.options?.status_message || "Alert check completed",
+                        life: 5000,
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("Error polling alert job status:", error);
+            clearInterval(interval);
+        }
+    }, 2000);
+
+    setTimeout(() => clearInterval(interval), 5 * 60 * 1000);
+}
+
 onMounted(async () => {
     await loadJobs();
     await loadScheduledExports();
     await loadSchedulerStatus();
+    await loadLowStockAlerts();
+    await loadAlertSchedulerStatus();
+    await loadAlertJobs();
     refreshInterval = setInterval(loadJobs, 2000);
-    // Refresh scheduler status every 30 seconds
     setInterval(loadSchedulerStatus, 30000);
+    setInterval(loadAlertSchedulerStatus, 30000);
 });
 
 onUnmounted(() => {
@@ -1039,6 +1689,8 @@ onUnmounted(() => {
 
 .jobs-list {
     padding: 1.5rem;
+    max-height: 28rem;
+    overflow-y: auto;
 }
 
 .empty-jobs {

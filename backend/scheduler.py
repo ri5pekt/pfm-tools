@@ -3,8 +3,9 @@ import logging
 from app.jobs.queues import get_redis_connection
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.jobs.models import ScheduledExport
+from app.jobs.models import ScheduledExport, LowStockAlert
 from app.features.inventory_data.scheduler_service import schedule_rq_job as schedule_inventory_export
+from app.features.inventory_data.alert_scheduler_service import schedule_rq_job as schedule_inventory_low_stock_alert
 from app.features.ulta_marketplace.scheduler_service import schedule_rq_job as schedule_ulta_export
 from app.features.daily_orders_data.scheduler_service import schedule_rq_job as schedule_daily_orders_export
 from app.features.daily_product_sales.scheduler_service import schedule_rq_job as schedule_daily_product_sales_export
@@ -127,6 +128,34 @@ def main():
                 logger.error(f"Error registering scheduled export {scheduled_export.id}: {str(e)}", exc_info=True)
 
         logger.info(f"Successfully registered {scheduled_count} of {len(scheduled_exports)} scheduled exports")
+
+        # Load all enabled low stock alerts
+        low_stock_alerts = db.query(LowStockAlert).filter(
+            LowStockAlert.enabled == True
+        ).all()
+
+        logger.info(f"Found {len(low_stock_alerts)} enabled low stock alert(s)")
+
+        alert_count = 0
+        for alert in low_stock_alerts:
+            try:
+                if alert.feature == "inventory_data":
+                    rq_job_id = schedule_inventory_low_stock_alert(db, alert)
+                else:
+                    logger.warning(
+                        f"Unknown feature '{alert.feature}' for low stock alert {alert.id}, skipping"
+                    )
+                    continue
+
+                if rq_job_id:
+                    alert_count += 1
+                    logger.info(f"Successfully registered low stock alert {alert.id} ({alert.name})")
+                else:
+                    logger.error(f"Failed to register low stock alert {alert.id} ({alert.name})")
+            except Exception as e:
+                logger.error(f"Error registering low stock alert {alert.id}: {str(e)}", exc_info=True)
+
+        logger.info(f"Successfully registered {alert_count} of {len(low_stock_alerts)} low stock alerts")
         logger.info("RQ Scheduler initialization complete. The rqscheduler process will handle execution.")
 
     except Exception as e:

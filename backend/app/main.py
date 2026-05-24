@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.db import Base, engine
-from app.jobs.models import Job, ScheduledExport  # Ensure models are registered
+from app.jobs.models import Job, ScheduledExport, LowStockAlert  # Ensure models are registered
 from app.auth.routes import router as auth_router
 from app.features.sales_tax_processor.routes import router as sales_tax_router
 from app.features.order_comparison.routes import router as order_comparison_router
@@ -77,6 +77,45 @@ try:
 except Exception as e:
     # Non-critical, just log it
     logging.getLogger(__name__).debug(f"Migration check skipped: {e}")
+
+# Add low_stock_alerts columns if they don't exist (safe migration)
+try:
+    from sqlalchemy import text, inspect
+    from app.core.db import SessionLocal
+
+    inspector = inspect(engine)
+    if "low_stock_alerts" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("low_stock_alerts")]
+        logger = logging.getLogger(__name__)
+        db = SessionLocal()
+        try:
+            migrations = [
+                ("times", "ALTER TABLE low_stock_alerts ADD COLUMN times JSONB"),
+                ("rq_job_ids", "ALTER TABLE low_stock_alerts ADD COLUMN rq_job_ids JSONB"),
+                ("klb_threshold", "ALTER TABLE low_stock_alerts ADD COLUMN klb_threshold INTEGER"),
+                ("shipbob_threshold", "ALTER TABLE low_stock_alerts ADD COLUMN shipbob_threshold INTEGER"),
+            ]
+            for column_name, sql in migrations:
+                if column_name not in columns:
+                    logger.info(f"Adding '{column_name}' column to low_stock_alerts table...")
+                    db.execute(text(sql))
+                    db.commit()
+                    logger.info(f"Successfully added '{column_name}' column")
+
+            db.execute(text("""
+                UPDATE low_stock_alerts
+                SET klb_threshold = threshold, shipbob_threshold = threshold
+                WHERE (klb_threshold IS NULL OR shipbob_threshold IS NULL)
+                  AND threshold IS NOT NULL
+            """))
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Could not migrate low_stock_alerts table: {e}")
+            db.rollback()
+        finally:
+            db.close()
+except Exception as e:
+    logging.getLogger(__name__).debug(f"Low stock alerts migration check skipped: {e}")
 
 # =====================================================
 # FastAPI app

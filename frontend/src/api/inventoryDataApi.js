@@ -101,3 +101,46 @@ export async function deleteScheduledExport(id) {
     });
 }
 
+// Low Stock Alert CRUD
+export async function createLowStockAlert(data) {
+    return http("/app/inventory-data/low-stock-alerts", {
+        method: "POST",
+        body: data,
+    });
+}
+
+export async function getLowStockAlerts() {
+    return http("/app/inventory-data/low-stock-alerts");
+}
+
+export async function getLowStockAlert(id) {
+    return http(`/app/inventory-data/low-stock-alerts/${id}`);
+}
+
+export async function updateLowStockAlert(id, data) {
+    return http(`/app/inventory-data/low-stock-alerts/${id}`, {
+        method: "PUT",
+        body: data,
+    });
+}
+
+export async function deleteLowStockAlert(id) {
+    return http(`/app/inventory-data/low-stock-alerts/${id}`, {
+        method: "DELETE",
+    });
+}
+
+export async function runLowStockAlert(id) {
+    return http(`/app/inventory-data/low-stock-alerts/${id}/run`, {
+        method: "POST",
+    });
+}
+
+export async function getLowStockAlertSchedulerStatus() {
+    return http("/app/inventory-data/low-stock-alerts/scheduler/status");
+}
+
+export async function getLowStockAlertJobs() {
+    return http("/app/inventory-data/low-stock-alert-jobs");
+}
+
